@@ -113,4 +113,15 @@ if api_token and device_sn:
                 
                 readings = item.get("readings", [])
                 for r in readings:
-                    if r.get("error_flag") is True
+                    if r.get("error_flag") is True:
+                        continue
+                        
+                    timestamp = pd.to_datetime(r.get("datetime"))
+                    val_raw = r.get("value")
+                    
+                    if val_raw is not None:
+                        try:
+                            val_float = float(val_raw)
+                            if abs(val_float) < 9999:
+                                # --- ASOCIACIÓN DE UBICACIONES Y LEYENDAS ---
+                                ubic
