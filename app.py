@@ -150,4 +150,4 @@ if api_token and device_sn:
         if not df.empty:
             # --- SEPARACIÓN DE VARIABLES SEGÚN SENSOR ---
             hydros_df = df[df['Sensor'].str.contains('CTD|Hydros', case=False, na=False)]
-            soil_df = df[df['Sensor'].str.contains('5TE|5TM', case=False, na=False
+            soil_df = df[df['Sensor'].str.contains('5TE|5TM', case=False, na=False)
