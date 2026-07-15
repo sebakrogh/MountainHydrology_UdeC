@@ -1,8 +1,8 @@
 {\rtf1\ansi\ansicpg1252\cocoartf2870
-\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\fnil\fcharset0 AppleColorEmoji;}
 {\colortbl;\red255\green255\blue255;}
 {\*\expandedcolortbl;;}
-\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\margl1440\margr1440\vieww26380\viewh14740\viewkind0
 \pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
 
 \f0\fs24 \cf0 import streamlit as st\
@@ -13,7 +13,9 @@ from datetime import datetime, timedelta\
 \
 # Configuraci\'f3n del panel web\
 st.set_page_config(page_title="Monitor Hydros 21", layout="wide")\
-st.title("\uc0\u55356 \u57098  Monitoreo de Sensor Hydros 21 - \'daltimas 2 Semanas")\
+st.title("
+\f1 \uc0\u55356 \u57098 
+\f0  Monitoreo de Sensor Hydros 21 - \'daltimas 2 Semanas")\
 st.markdown("Datos consultados en tiempo real desde la API de ZENTRA Cloud.")\
 \
 # --- PAR\'c1METROS EN BARRA LATERAL ---\
@@ -25,7 +27,9 @@ device_sn = st.secrets.get("DEVICE_SN", "")\
 \
 # Si no est\'e1n configurados en Secrets, permite ingresarlos manualmente\
 if not api_token or not device_sn:\
-    st.sidebar.warning("\uc0\u9888 \u65039  Configura las credenciales en Streamlit Secrets para producci\'f3n.")\
+    st.sidebar.warning("
+\f1 \uc0\u9888 \u65039 
+\f0  Configura las credenciales en Streamlit Secrets para producci\'f3n.")\
     api_token = st.sidebar.text_input("ZENTRA Token", type="password", value=api_token)\
     device_sn = st.sidebar.text_input("N\'famero de Serie del Registrador", value=device_sn)\
 \
@@ -85,10 +89,18 @@ if api_token and device_sn:\
             \
             # Crear pesta\'f1as para organizar de forma limpia cada gr\'e1fico\
             tab1, tab2, tab3, tab4 = st.tabs([\
-                "\uc0\u55357 \u56487  Profundidad de Agua", \
-                "\uc0\u55356 \u57121 \u65039  Temperatura del Agua", \
-                "\uc0\u9889  Conductividad El\'e9ctrica", \
-                "\uc0\u55357 \u56523  Tabla de Datos"\
+                "
+\f1 \uc0\u55357 \u56487 
+\f0  Profundidad de Agua", \
+                "
+\f1 \uc0\u55356 \u57121 \u65039 
+\f0  Temperatura del Agua", \
+                "
+\f1 \uc0\u9889 
+\f0  Conductividad El\'e9ctrica", \
+                "
+\f1 \uc0\u55357 \u56523 
+\f0  Tabla de Datos"\
             ])\
             \
             with tab1:\
