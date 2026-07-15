@@ -124,4 +124,112 @@ if api_token and device_sn:
                             val_float = float(val_raw)
                             if abs(val_float) < 9999:
                                 # --- ASOCIACIÓN DE UBICACIONES Y LEYENDAS ---
-                                ubic
+                                ubicacion = f"Puerto {port}"
+                                if sensor_model == "CTD-10":
+                                    if str(port) == "1":
+                                        ubicacion = "Estero"
+                                    elif str(port) == "2":
+                                        ubicacion = "Pozo"
+                                elif sensor_model in ["5TE", "5TM"]:
+                                    ubicacion = f"Puerto {port}"
+                                
+                                records.append({
+                                    "Fecha_Local": timestamp,
+                                    "Puerto": f"Puerto {port}",
+                                    "Sensor": sensor_model,
+                                    "Ubicación": ubicacion,
+                                    "Variable": variable_name,
+                                    "Valor": val_float,
+                                    "Unidad": unit
+                                })
+                        except (ValueError, TypeError):
+                            continue
+                            
+        df = pd.DataFrame(records)
+        
+        if not df.empty:
+            # --- SEPARACIÓN DE VARIABLES SEGÚN SENSOR ---
+            hydros_df = df[df['Sensor'].str.contains('CTD|Hydros', case=False, na=False)]
+            soil_df = df[df['Sensor'].str.contains('5TE|5TM', case=False, na=False)]
+            system_df = df[df['Sensor'].str.contains('Battery|Barometer', case=False, na=False)]
+            
+            # --- PALETAS DE COLORES PERSONALIZADAS ---
+            colors_hydros = {"Estero": "#0284c7", "Pozo": "#f97316"}
+            colors_soil = {"Puerto 3": "#10b981", "Puerto 4": "#eab308", "Puerto 5": "#a855f7"}
+            
+            # --- CREACIÓN DE PESTAÑAS ---
+            tab1, tab2, tab3, tab4 = st.tabs([
+                "💧 Sensor Hydros 21 (Agua)", 
+                "🌱 Sensor 5TE / 5TM (Suelo)", 
+                "🔋 Estado del Sistema", 
+                "📋 Tabla General"
+            ])
+            
+            # PESTAÑA 1: HYDROS 21 (Estero vs Pozo)
+            with tab1:
+                st.subheader("Monitoreo de la Columna de Agua")
+                if not hydros_df.empty:
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        sub_depth = hydros_df[hydros_df['Variable'] == 'Water Level']
+                        if not sub_depth.empty:
+                            unit = sub_depth['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_depth, "Nivel de Agua", f"Profundidad ({unit})", colors_hydros)
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                    with col2:
+                        sub_temp = hydros_df[hydros_df['Variable'] == 'Water Temperature']
+                        if not sub_temp.empty:
+                            unit = sub_temp['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_temp, "Temperatura del Agua", f"Temperatura ({unit})", colors_hydros)
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                    with col3:
+                        sub_ec = hydros_df[hydros_df['Variable'] == 'EC']
+                        if not sub_ec.empty:
+                            unit = sub_ec['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_ec, "Conductividad Eléctrica", f"Conductividad ({unit})", colors_hydros)
+                            st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No se encontraron datos del sensor Hydros 21.")
+
+            # PESTAÑA 2: SENSORES DE SUELO (Puerto 3, 4 y 5)
+            with tab2:
+                st.subheader("Parámetros de Humedad y Temperatura de Suelo (Puertos 3, 4 y 5)")
+                if not soil_df.empty:
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        sub_wc = soil_df[soil_df['Variable'] == 'Water Content']
+                        if not sub_wc.empty:
+                            unit = sub_wc['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_wc, "Contenido Volumétrico de Agua", f"Humedad ({unit})", colors_soil)
+                            st.plotly_chart(fig, use_container_width=True)
+                    
+                    with col2:
+                        sub_st = soil_df[soil_df['Variable'] == 'Soil Temperature']
+                        if not sub_st.empty:
+                            unit = sub_st['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_st, "Temperatura de Suelo", f"Temperatura ({unit})", colors_soil)
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                    with col3:
+                        sub_sec = soil_df[soil_df['Variable'] == 'Saturation Extract EC']
+                        if not sub_sec.empty:
+                            unit = sub_sec['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_sec, "EC Extracto Saturación", f"Salinidad ({unit})", colors_soil)
+                            st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No se encontraron datos de los sensores de suelo (Puertos 3, 4 o 5).")
+
+            # PESTAÑA 3: DIAGNÓSTICO
+            with tab3:
+                st.subheader("Parámetros de Diagnóstico y Presión de Referencia")
+                if not system_df.empty:
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        sub_bat = system_df[system_df['Variable'] == 'Battery Percent']
+                        if not sub_bat.empty:
+                            fig = crear_grafico_estilizado(sub_bat, "Nivel de Batería",
