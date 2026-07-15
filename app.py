@@ -113,41 +113,4 @@ if api_token and device_sn:
                 
                 readings = item.get("readings", [])
                 for r in readings:
-                    if r.get("error_flag") is True:
-                        continue
-                        
-                    timestamp = pd.to_datetime(r.get("datetime"))
-                    val_raw = r.get("value")
-                    
-                    if val_raw is not None:
-                        try:
-                            val_float = float(val_raw)
-                            if abs(val_float) < 9999:
-                                # --- ASOCIACIÓN DE UBICACIONES Y LEYENDAS ---
-                                ubicacion = f"Puerto {port}"
-                                if sensor_model == "CTD-10":
-                                    if str(port) == "1":
-                                        ubicacion = "Estero"
-                                    elif str(port) == "2":
-                                        ubicacion = "Pozo"
-                                elif sensor_model in ["5TE", "5TM"]:
-                                    ubicacion = f"Puerto {port}"
-                                
-                                records.append({
-                                    "Fecha_Local": timestamp,
-                                    "Puerto": f"Puerto {port}",
-                                    "Sensor": sensor_model,
-                                    "Ubicación": ubicacion,
-                                    "Variable": variable_name,
-                                    "Valor": val_float,
-                                    "Unidad": unit
-                                })
-                        except (ValueError, TypeError):
-                            continue
-                            
-        df = pd.DataFrame(records)
-        
-        if not df.empty:
-            # --- SEPARACIÓN DE VARIABLES SEGÚN SENSOR ---
-            hydros_df = df[df['Sensor'].str.contains('CTD|Hydros', case=False, na=False)]
-            soil_df = df[df['Sensor'].str.contains('5TE|5TM', case=False, na=False)
+                    if r.get("error_flag") is True
