@@ -110,4 +110,15 @@ if api_token and device_sn:
                     st.info("No se encontraron datos de temperatura en el rango seleccionado.")
                     
             with tab3:
-                if not ec_df.empty
+                if not ec_df.empty:
+                    fig_ec = px.line(ec_df, x='Fecha_UTC', y='Valor', color='Sensor',
+                                     title="Conductividad Eléctrica",
+                                     labels={'Fecha_UTC': 'Fecha (UTC)', 'Valor': 'Conductividad'})
+                    fig_ec.update_traces(line_color='#10b981')
+                    st.plotly_chart(fig_ec, use_container_width=True)
+                else:
+                    st.info("No se encontraron datos de conductividad eléctrica en el rango seleccionado.")
+                    
+            with tab4:
+                st.subheader("Datos Consolidados del Sensor")
+                df_mostrar
