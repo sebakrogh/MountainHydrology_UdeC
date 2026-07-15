@@ -150,14 +150,4 @@ if api_token and device_sn:
         if not df.empty:
             # --- SEPARACIÓN DE VARIABLES SEGÚN SENSOR ---
             hydros_df = df[df['Sensor'].str.contains('CTD|Hydros', case=False, na=False)]
-            soil_df = df[df['Sensor'].str.contains('5TE|5TM', case=False, na=False)]
-            system_df = df[df['Sensor'].str.contains('Battery|Barometer', case=False, na=False)]
-            
-            # --- PALETAS DE COLORES PERSONALIZADAS ---
-            # Azul para Estero, Naranja para Pozo
-            colors_hydros = {"Estero": "#0284c7", "Pozo": "#f97316"}
-            # Paleta de verdes/morados para los tres puertos de suelo
-            colors_soil = {"Puerto 3": "#10b981", "Puerto 4": "#eab308", "Puerto 5": "#a855f7"}
-            
-            # --- CREACIÓN DE PESTAÑAS ---
-            tab1, tab2, tab3, tab4 = st.tabs(
+            soil_df = df[df['Sensor'].str.contains('5TE|5TM', case=False, na=False
