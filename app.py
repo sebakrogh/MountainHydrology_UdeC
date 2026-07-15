@@ -6,38 +6,39 @@ from datetime import datetime, timedelta
 
 # Configuración del panel web
 st.set_page_config(page_title="Monitor Hydros 21", layout="wide")
-st.title("🌊 Monitoreo de Sensor Hydros 21 - Últimas 2 Semanas")
+st.title("🌊 Monitoreo de Sensor Hydros 21 - Últimas 2 Semanas (API v4)")
 st.markdown("Datos consultados en tiempo real desde la API de ZENTRA Cloud.")
 
-# --- PARÁMETROS EN BARRA LATERAL ---
-st.sidebar.header("Configuración de Conexión")
-
-# Uso de Secrets de Streamlit para no exponer credenciales
+# --- PARÁMETROS DESDE SECRETS ---
 api_token = st.secrets.get("ZENTRA_TOKEN", "")
 device_sn = st.secrets.get("DEVICE_SN", "")
 
-# Si no están configurados en Secrets, permite ingresarlos manualmente
-if not api_token or not device_sn:
-    st.sidebar.warning("⚠️ Configura las credenciales en Streamlit Secrets para producción.")
-    api_token = st.sidebar.text_input("ZENTRA Token", type="password", value=api_token)
-    device_sn = st.sidebar.text_input("Número de Serie del Registrador", value=device_sn)
-
-# --- CONSULTA A LA API (ÚLTIMAS 2 SEMANAS) ---
-@st.cache_data(ttl=900)  # Almacena en caché por 15 minutos para optimizar llamadas API
-def fetch_hydros_data(token, sn):
-    headers = {"Authorization": f"Token {token}"}
+# --- CONSULTA A LA API v4 (ÚLTIMAS 2 SEMANAS) ---
+@st.cache_data(ttl=900)  # Guarda en caché por 15 minutos para optimizar
+def fetch_hydros_data_v4(token, sn):
+    # Cabecera de autenticación idéntica a tu curl exitoso
+    headers = {
+        "Authorization": f"Token {token}"
+    }
     
     # Calcular rango de tiempo para las últimas 2 semanas (14 días)
     end_time = datetime.utcnow()
     start_time = end_time - timedelta(days=14)
     
-    params = {
-        "start_date": start_time.strftime("%Y-%m-%d %H:%M:%S"),
-        "end_date": end_time.strftime("%Y-%m-%d %H:%M:%S")
-    }
+    # Formatear fechas con codificación de espacios para URL (%20 en lugar de espacio plano)
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
     
-    url = f"https://api.zentracloud.com/v5/devices/{sn}/readings/"
-    response = requests.get(url, headers=headers, params=params)
+    # Construimos la URL completa con los parámetros incrustados directamente (Query Parameters)
+    url = (
+        f"https://zentracloud.com/api/v4/get_readings/?"
+        f"device_sn={sn}&"
+        f"start_date={start_str}&"
+        f"end_date={end_str}"
+    )
+    
+    # Hacemos la petición directa con la URL parametrizada
+    response = requests.get(url, headers=headers)
     
     if response.status_code == 200:
         return response.json()
@@ -47,36 +48,40 @@ def fetch_hydros_data(token, sn):
 
 # --- PROCESAMIENTO Y VISUALIZACIÓN ---
 if api_token and device_sn:
-    data_json = fetch_hydros_data(api_token, device_sn)
+    data_json = fetch_hydros_data_v4(api_token, device_sn)
     
+    # La API v4 devuelve un formato estructurado como un diccionario de datos
     if data_json and 'data' in data_json:
         readings = data_json['data']
         records = []
         
-        # Recorrer puertos y sensores para extraer las métricas del Hydros 21
-        for port, sensors in readings.items():
-            for sensor_name, measurements in sensors.items():
-                for m in measurements:
-                    records.append({
-                        "Fecha_UTC": pd.to_datetime(m['datetime']),
-                        "Sensor": f"Puerto {port} - {sensor_name}",
-                        "Variable": m.get('description', sensor_name),
-                        "Valor": m['value'],
-                        "Unidad": m.get('unit', '')
-                    })
+        # Procesar la respuesta JSON de ZENTRA v4
+        for sensor_port, measurements in readings.items():
+            for measurement in measurements:
+                # Extraer variables si contiene lecturas válidas
+                timestamp = pd.to_datetime(measurement.get('datetime'))
+                for key, value in measurement.items():
+                    # Ignorar metadatos comunes para quedarnos solo con las variables físicas
+                    if key not in ['datetime', 'error', 'metadata']:
+                        records.append({
+                            "Fecha_UTC": timestamp,
+                            "Sensor": sensor_port,
+                            "Variable": key,
+                            "Valor": value
+                        })
         
         df = pd.DataFrame(records)
         
         if not df.empty:
-            # Filtrar las 3 variables clave del Hydros 21 utilizando búsquedas parciales inteligentes
+            # Normalizar nombres de variables para buscar el Hydros 21
             df['Variable_Normalizada'] = df['Variable'].str.lower()
             
-            # Filtros por palabras clave (en inglés y español según la configuración del sensor)
-            depth_df = df[df['Variable_Normalizada'].str.contains('depth|profundidad|water level|nivel')]
+            # Filtros para las variables clave del Hydros 21 (profundidad, temperatura y conductividad)
+            depth_df = df[df['Variable_Normalizada'].str.contains('depth|water level|nivel|profundidad')]
             temp_df = df[df['Variable_Normalizada'].str.contains('temp|temperature|temperatura')]
             ec_df = df[df['Variable_Normalizada'].str.contains('ec|conductivity|conductividad|bulk ec')]
             
-            # Crear pestañas para organizar de forma limpia cada gráfico
+            # Crear pestañas para organizar cada gráfico de forma limpia
             tab1, tab2, tab3, tab4 = st.tabs([
                 "💧 Profundidad de Agua", 
                 "🌡️ Temperatura del Agua", 
@@ -86,9 +91,9 @@ if api_token and device_sn:
             
             with tab1:
                 if not depth_df.empty:
-                    fig_depth = px.line(depth_df, x='Fecha_UTC', y='Valor', 
-                                        title="Nivel / Profundidad del Agua (Últimas 2 Semanas)",
-                                        labels={'Fecha_UTC': 'Fecha (UTC)', 'Valor': f"Profundidad ({depth_df['Unidad'].iloc[0]})"})
+                    fig_depth = px.line(depth_df, x='Fecha_UTC', y='Valor', color='Sensor',
+                                        title="Nivel / Profundidad del Agua",
+                                        labels={'Fecha_UTC': 'Fecha (UTC)', 'Valor': 'Profundidad'})
                     fig_depth.update_traces(line_color='#0284c7')
                     st.plotly_chart(fig_depth, use_container_width=True)
                 else:
@@ -96,32 +101,13 @@ if api_token and device_sn:
                     
             with tab2:
                 if not temp_df.empty:
-                    fig_temp = px.line(temp_df, x='Fecha_UTC', y='Valor', 
-                                       title="Temperatura del Agua (Últimas 2 Semanas)",
-                                       labels={'Fecha_UTC': 'Fecha (UTC)', 'Valor': f"Temperatura ({temp_df['Unidad'].iloc[0]})"})
+                    fig_temp = px.line(temp_df, x='Fecha_UTC', y='Valor', color='Sensor',
+                                       title="Temperatura del Agua",
+                                       labels={'Fecha_UTC': 'Fecha (UTC)', 'Valor': 'Temperatura (°C)'})
                     fig_temp.update_traces(line_color='#f97316')
                     st.plotly_chart(fig_temp, use_container_width=True)
                 else:
                     st.info("No se encontraron datos de temperatura en el rango seleccionado.")
                     
             with tab3:
-                if not ec_df.empty:
-                    fig_ec = px.line(ec_df, x='Fecha_UTC', y='Valor', 
-                                     title="Conductividad Eléctrica (Últimas 2 Semanas)",
-                                     labels={'Fecha_UTC': 'Fecha (UTC)', 'Valor': f"EC ({ec_df['Unidad'].iloc[0]})"})
-                    fig_ec.update_traces(line_color='#10b981')
-                    st.plotly_chart(fig_ec, use_container_width=True)
-                else:
-                    st.info("No se encontraron datos de conductividad eléctrica en el rango seleccionado.")
-                    
-            with tab4:
-                st.subheader("Datos Consolidados del Sensor")
-                # Mostrar tabla con opción de descarga incorporada por Streamlit
-                df_mostrar = df[['Fecha_UTC', 'Sensor', 'Variable', 'Valor', 'Unidad']].sort_values(by='Fecha_UTC', ascending=False)
-                st.dataframe(df_mostrar, use_container_width=True)
-        else:
-            st.warning("No se encontraron mediciones ni datos estructurados para este número de serie en las últimas 2 semanas.")
-    else:
-        st.error("No se pudo obtener la estructura de datos del dispositivo. Verifica que el número de serie sea correcto.")
-else:
-    st.info("Por favor, introduce tu Token de ZENTRA y el SN del logger en la barra lateral o configúralos en Streamlit Secrets.")
+                if not ec_df.empty
