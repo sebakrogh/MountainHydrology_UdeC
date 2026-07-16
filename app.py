@@ -131,6 +131,8 @@ if api_token and device_sn:
                             val_float = float(val_raw)
                             if abs(val_float) < 9999:
                                 ubicacion = f"Puerto {port}"
+                                
+                                # Lógica para determinar el nombre de la ubicación en base al sensor y puerto
                                 if sensor_model == "CTD-10":
                                     if port == "1":
                                         ubicacion = "Estero"
@@ -138,6 +140,9 @@ if api_token and device_sn:
                                         ubicacion = "Pozo"
                                 elif sensor_model in ["5TE", "5TM"]:
                                     ubicacion = f"Puerto {port}"
+                                elif "Logger" in variable_name or "Battery" in variable_name:
+                                    # Forzamos que las variables internas del datalogger usen esta ubicación
+                                    ubicacion = "Temperatura del aire (datalogger)"
                                 
                                 records.append({
                                     "Fecha_Local": timestamp,
@@ -156,10 +161,23 @@ if api_token and device_sn:
         if not df.empty:
             hydros_df = df[df['Sensor'].str.contains('CTD|Hydros', case=False, na=False)]
             soil_df = df[df['Sensor'].str.contains('5TE|5TM', case=False, na=False)]
-            system_df = df[df['Sensor'].str.contains('Battery|Barometer', case=False, na=False)]
+            system_df = df[df['Sensor'].str.contains('Battery|Barometer|Logger', case=False, na=False)]
             
-            colors_hydros = {"Estero": "#0284c7", "Pozo": "#f97316"}
-            colors_soil = {"Puerto 3": "#10b981", "Puerto 4": "#eab308", "Puerto 5": "#a855f7"}
+            # Buscamos de manera específica la variable de temperatura del datalogger
+            logger_temp_df = df[df['Variable'].str.contains('Logger Temperature', case=False, na=False)]
+            
+            # Mapas de colores consistentes
+            colors_hydros = {
+                "Estero": "#0284c7", 
+                "Pozo": "#f97316", 
+                "Temperatura del aire (datalogger)": "#64748b" # Gris neutro distinguible
+            }
+            colors_soil = {
+                "Puerto 3": "#10b981", 
+                "Puerto 4": "#eab308", 
+                "Puerto 5": "#a855f7", 
+                "Temperatura del aire (datalogger)": "#64748b"
+            }
             
             # Pestañas para las gráficas
             tab1, tab2, tab3 = st.tabs([
@@ -184,8 +202,12 @@ if api_token and device_sn:
                     with col2:
                         sub_temp = hydros_df[hydros_df['Variable'] == 'Water Temperature']
                         if not sub_temp.empty:
+                            # Combinar la temperatura de agua de los sensores con la del datalogger
+                            if not logger_temp_df.empty:
+                                sub_temp = pd.concat([sub_temp, logger_temp_df], ignore_index=True)
+                            
                             unit_str = sub_temp['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_temp, "Temperatura del Agua", f"Temperatura ({unit_str})", colors_hydros)
+                            fig = crear_grafico_estilizado(sub_temp, "Temperatura del Agua vs Aire", f"Temperatura ({unit_str})", colors_hydros)
                             st.plotly_chart(fig, use_container_width=True)
                             
                     with col3:
@@ -213,8 +235,12 @@ if api_token and device_sn:
                     with col2:
                         sub_st = soil_df[soil_df['Variable'] == 'Soil Temperature']
                         if not sub_st.empty:
+                            # Combinar la temperatura de suelo de los puertos con la del datalogger
+                            if not logger_temp_df.empty:
+                                sub_st = pd.concat([sub_st, logger_temp_df], ignore_index=True)
+                                
                             unit_str = sub_st['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_st, "Temperatura de Suelo", f"Temperatura ({unit_str})", colors_soil)
+                            fig = crear_grafico_estilizado(sub_st, "Temperatura de Suelo vs Aire", f"Temperatura ({unit_str})", colors_soil)
                             st.plotly_chart(fig, use_container_width=True)
                             
                     with col3:
@@ -252,7 +278,7 @@ if api_token and device_sn:
     else:
         st.error("No se pudo analizar el JSON de respuesta de ZENTRA. Asegúrate de que las credenciales son correctas.")
 else:
-    st.info("Configura las credenciales `ZENTRA_TOKEN` y `DEVICE_SN` en los Secrets de Streamlit.")
+    st.info("Configura las credenciales `ZENTRA_TOKEN` y `DEVICE_SN` in los Secrets de Streamlit.")
 
 
 # --- SECCIÓN FIJA DE FOTOGRAFÍA AL FINAL DE LA PÁGINA ---
