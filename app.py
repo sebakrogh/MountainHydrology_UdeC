@@ -3,15 +3,52 @@ import pandas as pd
 import requests
 import plotly.express as px
 from datetime import datetime, timedelta
+from PIL import Image
 
-# Configuración del panel web
-st.set_page_config(page_title="Monitor Meteorológico UdeC", layout="wide")
-st.title("🌊 Panel de Monitoreo Ambiental - Universidad de Concepción")
-st.markdown("Visualización en tiempo real de sensores Hydros 21 (CTD-10) y Sensores de Suelo (5TE/5TM).")
+# --- CONFIGURACIÓN DE LA PÁGINA ---
+st.set_page_config(page_title="Valle Hermoso - Monitoreo UdeC", layout="wide")
+
+# --- TÍTULO Y DESCRIPCIÓN DEL SITIO ---
+st.title("🏔️ Estación de Monitoreo en Valle Hermoso")
+st.markdown("### **Grupo de Hidrología de Montaña UdeC**")
+
+# Bloque de metadatos del sitio
+col_meta1, col_meta2 = st.columns(2)
+with col_meta1:
+    st.markdown("""
+    * **Elevación:** 1576 msnm
+    * **Financiamiento:** Fondecyt Regular 1261545
+    * **Investigador Principal (IP):** Sebastian Krogh
+    """)
+with col_meta2:
+    st.markdown("""
+    * **Sensores en Terreno:** Hydros 21 (CTD-10) en Estero/Pozo y Sensores de Suelo (5TE/5TM)
+    * **Frecuencia de Actualización:** Tiempo real (API ZENTRA Cloud v4)
+    * **Rango Visualizado:** Últimas 2 semanas
+    """)
+
+st.markdown("---")
 
 # --- PARÁMETROS DESDE SECRETS ---
 api_token = st.secrets.get("ZENTRA_TOKEN", "")
 device_sn = st.secrets.get("DEVICE_SN", "")
+
+# --- BARRA LATERAL (Cargar Fotografía y Estado de Conexión) ---
+st.sidebar.header("📸 Visualización de Terreno")
+uploaded_file = st.sidebar.file_uploader(
+    "Sube una fotografía de la estación", 
+    type=["jpg", "jpeg", "png"],
+    help="La imagen se desplegará en la barra lateral para contextualizar el sitio de monitoreo."
+)
+
+if uploaded_file is not None:
+    try:
+        image = Image.open(uploaded_file)
+        st.sidebar.image(image, caption="Estación Valle Hermoso", use_container_width=True)
+    except Exception as e:
+        st.sidebar.error(f"No se pudo cargar la imagen: {e}")
+else:
+    st.sidebar.info("💡 Puedes subir una foto de la estación (.jpg o .png) para visualizarla aquí.")
 
 # --- CONSULTA A LA API v4 CON MANEJO DE ERRORES ---
 @st.cache_data(ttl=900)
@@ -31,7 +68,6 @@ def fetch_hydros_data_v4(token, sn):
             f"end_date={end_str}"
         )
         
-        # Timeout de 20 segundos para evitar que la app se quede congelada
         response = requests.get(url, headers=headers, timeout=20)
         
         if response.status_code == 200:
@@ -56,7 +92,6 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
         template="plotly_white"
     )
     
-    # SE ELIMINÓ shape='spline' PARA EVITAR CRASHES CON SERIES DE DATOS INCOMPLETAS
     fig.update_traces(line_width=2.5)
     
     fig.update_layout(
