@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 # --- 1. CONFIGURACIÓN DE PARÁMETROS ---
 # Reemplaza esto con el ID exacto de tu Google Sheet (lo encuentras en la URL de tu planilla)
-SPREADSHEET_ID = "https://docs.google.com/spreadsheets/d/1xSGxvtVRHfuNygH6lt7BPq0v1TLIzt2dDYfybKmMprg/edit?usp=sharing" 
+SPREADSHEET_ID = "1xSGxvtVRHfuNygH6lt7BPq0v1TLIzt2dDYfybKmMprg" 
 
 # Credenciales de la API de ZENTRA (se obtendrán de forma segura desde GitHub Secrets)
 API_TOKEN = os.environ.get("ZENTRA_TOKEN")
