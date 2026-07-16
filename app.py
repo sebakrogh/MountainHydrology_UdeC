@@ -13,27 +13,35 @@ st.markdown("Visualización en tiempo real de sensores Hydros 21 (CTD-10) y Sens
 api_token = st.secrets.get("ZENTRA_TOKEN", "")
 device_sn = st.secrets.get("DEVICE_SN", "")
 
-# --- CONSULTA A LA API v4 (ÚLTIMAS 2 SEMANAS) ---
+# --- CONSULTA A LA API v4 CON MANEJO DE ERRORES ---
 @st.cache_data(ttl=900)
 def fetch_hydros_data_v4(token, sn):
-    headers = {"Authorization": f"Token {token}"}
-    end_time = datetime.utcnow()
-    start_time = end_time - timedelta(days=14)
-    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
-    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
-    
-    url = (
-        f"https://zentracloud.com/api/v4/get_readings/?"
-        f"device_sn={sn}&"
-        f"start_date={start_str}&"
-        f"end_date={end_str}"
-    )
-    
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"Error de API ZENTRA ({response.status_code}): {response.text}")
+    try:
+        headers = {"Authorization": f"Token {token}"}
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(days=14)
+        
+        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
+        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
+        
+        url = (
+            f"https://zentracloud.com/api/v4/get_readings/?"
+            f"device_sn={sn}&"
+            f"start_date={start_str}&"
+            f"end_date={end_str}"
+        )
+        
+        # Timeout de 20 segundos para evitar que la app se quede congelada
+        response = requests.get(url, headers=headers, timeout=20)
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Error devuelto por la API ZENTRA ({response.status_code}): {response.text}")
+            return None
+            
+    except Exception as e:
+        st.error(f"Error de conexión con el servidor: {e}")
         return None
 
 # --- FUNCIÓN PARA GRÁFICOS MULTI-LÍNEA ESTILIZADOS ---
@@ -47,6 +55,7 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
         labels={'Fecha_Local': 'Fecha y Hora', 'Valor': y_label, 'Ubicación': 'Ubicación / Estación'},
         template="plotly_white"
     )
+    
     fig.update_traces(line=dict(width=2.5, shape='spline'), mode='lines')
     fig.update_layout(
         title=dict(text=titulo, font=dict(size=15, family="Arial", color="#1e293b"), x=0.0),
@@ -70,27 +79,42 @@ if api_token and device_sn:
         for variable_name, items in readings_dict.items():
             for item in items:
                 metadata = item.get("metadata", {})
-                port = metadata.get("port_number", "S/P")
-                sensor_model = metadata.get("sensor_name", "Desconocido")
-                unit = metadata.get("units", "").strip()
+                
+                # --- SANITIZACIÓN EXTREMA DE METADATOS PARA EVITAR CRASHES ---
+                port_raw = metadata.get("port_number")
+                port = str(port_raw) if port_raw is not None else "S/P"
+                
+                sensor_raw = metadata.get("sensor_name")
+                sensor_model = str(sensor_raw) if sensor_raw else "Desconocido"
+                
+                unit_raw = metadata.get("units")
+                unit = str(unit_raw).strip() if unit_raw else ""
                 
                 readings = item.get("readings", [])
                 for r in readings:
                     if r.get("error_flag") is True:
                         continue
                         
-                    timestamp = pd.to_datetime(r.get("datetime"))
+                    raw_dt = r.get("datetime")
+                    if not raw_dt:
+                        continue
+                        
+                    # Conversión segura de fechas y eliminación de Timezone para evitar conflictos en Streamlit
+                    timestamp = pd.to_datetime(raw_dt)
+                    if timestamp.tzinfo is not None:
+                        timestamp = timestamp.tz_localize(None)
+                        
                     val_raw = r.get("value")
-                    
                     if val_raw is not None:
                         try:
                             val_float = float(val_raw)
                             if abs(val_float) < 9999:
+                                # Asignación de ubicaciones según puertos
                                 ubicacion = f"Puerto {port}"
                                 if sensor_model == "CTD-10":
-                                    if str(port) == "1":
+                                    if port == "1":
                                         ubicacion = "Estero"
-                                    elif str(port) == "2":
+                                    elif port == "2":
                                         ubicacion = "Pozo"
                                 elif sensor_model in ["5TE", "5TM"]:
                                     ubicacion = f"Puerto {port}"
@@ -105,18 +129,21 @@ if api_token and device_sn:
                                     "Unidad": unit
                                 })
                         except (ValueError, TypeError):
-                            pass
+                            pass # Ignora silenciosamente los valores no numéricos
                             
         df = pd.DataFrame(records)
         
         if not df.empty:
+            # --- SEPARACIÓN DE VARIABLES SEGÚN SENSOR ---
             hydros_df = df[df['Sensor'].str.contains('CTD|Hydros', case=False, na=False)]
             soil_df = df[df['Sensor'].str.contains('5TE|5TM', case=False, na=False)]
             system_df = df[df['Sensor'].str.contains('Battery|Barometer', case=False, na=False)]
             
+            # --- PALETAS DE COLORES ---
             colors_hydros = {"Estero": "#0284c7", "Pozo": "#f97316"}
             colors_soil = {"Puerto 3": "#10b981", "Puerto 4": "#eab308", "Puerto 5": "#a855f7"}
             
+            # --- CREACIÓN DE PESTAÑAS ---
             tab1, tab2, tab3, tab4 = st.tabs([
                 "💧 Sensor Hydros 21 (Agua)", 
                 "🌱 Sensor 5TE / 5TM (Suelo)", 
@@ -124,74 +151,86 @@ if api_token and device_sn:
                 "📋 Tabla General"
             ])
             
+            # PESTAÑA 1: HYDROS 21
             with tab1:
                 st.subheader("Monitoreo de la Columna de Agua")
                 if not hydros_df.empty:
                     col1, col2, col3 = st.columns(3)
+                    
                     with col1:
                         sub_depth = hydros_df[hydros_df['Variable'] == 'Water Level']
                         if not sub_depth.empty:
-                            unit = sub_depth['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_depth, "Nivel de Agua", f"Profundidad ({unit})", colors_hydros)
+                            unit_str = sub_depth['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_depth, "Nivel de Agua", f"Profundidad ({unit_str})", colors_hydros)
                             st.plotly_chart(fig, use_container_width=True)
+                            
                     with col2:
                         sub_temp = hydros_df[hydros_df['Variable'] == 'Water Temperature']
                         if not sub_temp.empty:
-                            unit = sub_temp['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_temp, "Temperatura del Agua", f"Temperatura ({unit})", colors_hydros)
+                            unit_str = sub_temp['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_temp, "Temperatura del Agua", f"Temperatura ({unit_str})", colors_hydros)
                             st.plotly_chart(fig, use_container_width=True)
+                            
                     with col3:
                         sub_ec = hydros_df[hydros_df['Variable'] == 'EC']
                         if not sub_ec.empty:
-                            unit = sub_ec['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_ec, "Conductividad Eléctrica", f"Conductividad ({unit})", colors_hydros)
+                            unit_str = sub_ec['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_ec, "Conductividad Eléctrica", f"Conductividad ({unit_str})", colors_hydros)
                             st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No se encontraron datos del sensor Hydros 21.")
 
+            # PESTAÑA 2: SENSORES DE SUELO
             with tab2:
                 st.subheader("Parámetros de Humedad y Temperatura de Suelo (Puertos 3, 4 y 5)")
                 if not soil_df.empty:
                     col1, col2, col3 = st.columns(3)
+                    
                     with col1:
                         sub_wc = soil_df[soil_df['Variable'] == 'Water Content']
                         if not sub_wc.empty:
-                            unit = sub_wc['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_wc, "Contenido Volumétrico de Agua", f"Humedad ({unit})", colors_soil)
+                            unit_str = sub_wc['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_wc, "Contenido Volumétrico de Agua", f"Humedad ({unit_str})", colors_soil)
                             st.plotly_chart(fig, use_container_width=True)
+                    
                     with col2:
                         sub_st = soil_df[soil_df['Variable'] == 'Soil Temperature']
                         if not sub_st.empty:
-                            unit = sub_st['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_st, "Temperatura de Suelo", f"Temperatura ({unit})", colors_soil)
+                            unit_str = sub_st['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_st, "Temperatura de Suelo", f"Temperatura ({unit_str})", colors_soil)
                             st.plotly_chart(fig, use_container_width=True)
+                            
                     with col3:
                         sub_sec = soil_df[soil_df['Variable'] == 'Saturation Extract EC']
                         if not sub_sec.empty:
-                            unit = sub_sec['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_sec, "EC Extracto Saturación", f"Salinidad ({unit})", colors_soil)
+                            unit_str = sub_sec['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_sec, "EC Extracto Saturación", f"Salinidad ({unit_str})", colors_soil)
                             st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No se encontraron datos de los sensores de suelo (Puertos 3, 4 o 5).")
 
+            # PESTAÑA 3: DIAGNÓSTICO
             with tab3:
                 st.subheader("Parámetros de Diagnóstico y Presión de Referencia")
                 if not system_df.empty:
                     col1, col2 = st.columns(2)
+                    
                     with col1:
                         sub_bat = system_df[system_df['Variable'] == 'Battery Percent']
                         if not sub_bat.empty:
                             fig = crear_grafico_estilizado(sub_bat, "Nivel de Batería", "Porcentaje (%)", {"Puerto 7": "#e11d48"})
                             st.plotly_chart(fig, use_container_width=True)
+                            
                     with col2:
                         sub_pres = system_df[system_df['Variable'] == 'Reference Pressure']
                         if not sub_pres.empty:
-                            unit = sub_pres['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_pres, "Presión Atmosférica de Referencia", f"Presión ({unit})", {"Puerto 8": "#475569"})
+                            unit_str = sub_pres['Unidad'].iloc[0]
+                            fig = crear_grafico_estilizado(sub_pres, "Presión Atmosférica de Referencia", f"Presión ({unit_str})", {"Puerto 8": "#475569"})
                             st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No se encontraron datos de diagnóstico del sistema.")
 
+            # PESTAÑA 4: TABLA GENERAL
             with tab4:
                 st.subheader("Visualización de Datos Consolidados")
                 df_sorted = df[['Fecha_Local', 'Puerto', 'Sensor', 'Ubicación', 'Variable', 'Valor', 'Unidad']].sort_values(by='Fecha_Local', ascending=False)
@@ -200,6 +239,6 @@ if api_token and device_sn:
         else:
             st.warning("No se encontraron registros numéricos válidos en la respuesta de ZENTRA.")
     else:
-        st.error("No se pudo analizar el JSON de respuesta. Asegúrate de que las credenciales correspondan a tu logger activo.")
+        st.error("No se pudo analizar el JSON de respuesta de ZENTRA. Asegúrate de que las credenciales son correctas.")
 else:
     st.info("Configura las credenciales `ZENTRA_TOKEN` y `DEVICE_SN` en los Secrets de Streamlit.")
