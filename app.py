@@ -4,6 +4,7 @@ import requests
 import plotly.express as px
 from datetime import datetime, timedelta
 import os
+import time  # Para pausar entre peticiones si es necesario
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Valle Hermoso - Monitoreo UdeC", layout="wide")
@@ -24,7 +25,7 @@ with col_meta2:
     st.markdown("""
     * **Sensores en Terreno:** Hydros 21 (CTD-10) en Estero/Pozo y Sensores de Suelo (5TE/5TM)
     * **Frecuencia de Actualización:** Tiempo real (API ZENTRA Cloud v4)
-    * **Rango Visualizado:** Últimas 2 semanas (Paginado)
+    * **Rango Visualizado:** Últimas 2 semanas (Optimizado contra Rate Limits)
     """)
 
 st.markdown("---")
@@ -33,7 +34,7 @@ st.markdown("---")
 api_token = st.secrets.get("ZENTRA_TOKEN", "")
 device_sn = st.secrets.get("DEVICE_SN", "")
 
-# --- CONSULTA A LA API v4 CON PAGINACIÓN AUTOMÁTICA (ÚLTIMAS 2 SEMANAS) ---
+# --- CONSULTA A LA API v4 CON EVASIÓN DE RATE LIMIT (429) ---
 @st.cache_data(ttl=900)
 def fetch_hydros_data_v4(token, sn):
     headers = {"Authorization": f"Token {token}"}
@@ -45,21 +46,29 @@ def fetch_hydros_data_v4(token, sn):
     
     aggregated_data = {}
     page_num = 1
-    max_paginas = 5  # Límite de seguridad para evitar solicitudes infinitas
+    max_paginas = 3  # Reducido para evitar exceso de peticiones
     
     while page_num <= max_paginas:
         try:
-            # Construimos la URL agregando la variable de página activa
+            # OPTIMIZACIÓN CLAVE: Solicitamos 3000 registros por página en lugar del valor por defecto.
+            # Esto permite traer las 2 semanas completas de todos tus sensores en la primera página.
             url = (
                 f"https://zentracloud.com/api/v4/get_readings/?"
                 f"device_sn={sn}&"
                 f"start_date={start_str}&"
                 f"end_date={end_str}&"
+                f"per_page=3000&"
                 f"page_num={page_num}"
             )
             
             response = requests.get(url, headers=headers, timeout=20)
             
+            # Si nos arroja un error 429 de límite de peticiones, esperamos y reintentamos una vez
+            if response.status_code == 429:
+                st.warning("⚠️ Límite de API alcanzado temporalmente. Esperando 10 segundos para reintentar...")
+                time.sleep(10)
+                response = requests.get(url, headers=headers, timeout=20)
+                
             if response.status_code != 200:
                 st.error(f"Error devuelto por la API ZENTRA ({response.status_code}) en pág. {page_num}: {response.text}")
                 break
@@ -68,9 +77,9 @@ def fetch_hydros_data_v4(token, sn):
             page_data = json_response.get("data", {})
             
             if not page_data:
-                break  # Detener el bucle si la página viene vacía
+                break
                 
-            # Combinar los datos de esta página con los de las anteriores
+            # Combinar datos de la página
             for variable, sensor_blocks in page_data.items():
                 if variable not in aggregated_data:
                     aggregated_data[variable] = []
@@ -81,7 +90,6 @@ def fetch_hydros_data_v4(token, sn):
                     sensor_name = metadata.get("sensor_name")
                     readings = block.get("readings", [])
                     
-                    # Buscar si este sensor ya está registrado en nuestro consolidado
                     found = False
                     for existing_block in aggregated_data[variable]:
                         existing_meta = existing_block.get("metadata", {})
@@ -96,20 +104,21 @@ def fetch_hydros_data_v4(token, sn):
                             "readings": list(readings)
                         })
             
-            # Verificar si existe una página siguiente en la paginación de ZENTRA
+            # Verificar paginación
             pagination = json_response.get("pagination", {})
             next_url = pagination.get("next_url")
             
             if next_url:
                 page_num += 1
+                # Pausa obligatoria y segura de 2 segundos antes de la siguiente página para evitar el baneo 429
+                time.sleep(2)
             else:
-                break  # Salir si es la última página disponible
+                break
                 
         except Exception as e:
             st.error(f"Error de conexión con el servidor en página {page_num}: {e}")
             break
             
-    # Devolvemos la estructura final unificada con el formato esperado por la app
     return {"data": aggregated_data} if aggregated_data else None
 
 # --- FUNCIÓN PARA GRÁFICOS MULTI-LÍNEA ESTILIZADOS ---
