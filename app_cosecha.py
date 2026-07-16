@@ -41,12 +41,27 @@ def cargar_datos_historicos():
             st.error("Faltan configurar las variables 'gspread_creds' o 'HISTORICO_SHEETS_ID' en los Secrets de Streamlit.")
             return pd.DataFrame()
             
-        # Convertir creds_dict (que es un objeto de Streamlit) a un diccionario estándar de Python
+        # Convertir creds_dict a un diccionario estándar de Python para poder modificarlo
         creds_dict = dict(creds_dict)
         
-        # Corregir de forma segura los saltos de línea físicos de la clave PEM
+        # --- ALGORITMO ROBUSTO DE CURACIÓN DE CLAVE PRIVADA ---
         if "private_key" in creds_dict:
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+            pk = creds_dict["private_key"]
+            
+            # 1. Asegurar que las barras invertidas dobles \\n se transformen en salto de línea real
+            pk = pk.replace("\\\\n", "\n")
+            # 2. Asegurar que las barras invertidas simples \n se transformen en salto de línea real
+            pk = pk.replace("\\n", "\n")
+            
+            # 3. Corrección extrema: Si Streamlit aplanó el texto y eliminó los saltos de línea internos,
+            # reconstruimos la estructura PEM con saltos de línea reales cada vez que termine una sección.
+            if "-----BEGIN PRIVATE KEY-----" in pk and "\n" not in pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", ""):
+                body = pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").strip()
+                body = "".join(body.split())  # Quitamos espacios en blanco indeseados
+                lines = [body[i:i+64] for i in range(0, len(body), 64)] # Cortamos a 64 caracteres (Estándar de Google)
+                pk = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(lines) + "\n-----END PRIVATE KEY-----\n"
+                
+            creds_dict["private_key"] = pk
         
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
@@ -86,21 +101,46 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
         y='Valor', 
         color='Ubicación',
         color_discrete_map=color_map,
-        labels={'Fecha_Local': 'Fecha y Hora', 'Valor': y_label, 'Ubicación': 'Ubicación / Estación'},
+        labels={'Valor': y_label, 'Ubicación': 'Ubicación / Estación'},
         template="plotly_white"
     )
     
     fig.update_traces(line_width=2.5)
     
     fig.update_layout(
-        title=dict(text=titulo, font=dict(size=15, family="Arial", color="#1e293b"), x=0.0),
+        title=dict(
+            text=titulo, 
+            font=dict(size=14, family="Arial", color="#1e293b"), 
+            x=0.0,
+            y=0.95
+        ),
         hovermode="x unified",
-        margin=dict(l=40, r=20, t=50, b=40),
+        margin=dict(l=40, r=20, t=75, b=80),  # Aumentado el margen 'b' para evitar recortes en la leyenda
         height=400,
-        xaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1'),
-        yaxis=dict(showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', zeroline=False),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=dict(text=""))
+        xaxis=dict(
+            title=None,
+            showgrid=True, 
+            gridcolor='#f1f5f9', 
+            tickformat="%d %b\n%H:%M", 
+            linecolor='#cbd5e1'
+        ),
+        yaxis=dict(
+            title=dict(text=y_label, font=dict(size=12)),
+            showgrid=True, 
+            gridcolor='#f1f5f9', 
+            linecolor='#cbd5e1', 
+            zeroline=False
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.22,  
+            xanchor="center",
+            x=0.5,
+            title=dict(text="")
+        )
     )
+        
     return fig
 
 # --- PROCESAMIENTO Y FILTROS EN PÁGINA ---
@@ -108,16 +148,13 @@ if not df.empty:
     # --- BARRA LATERAL: SELECTOR TEMPORAL ---
     st.sidebar.header("🗓️ Rango Temporal")
     
-    # Determinar rango máximo de fechas en la base de datos
+    # Determinar rango máximo de fechas en la base de datos de forma robusta
     max_fecha = df['Fecha_Local'].max()
     min_fecha = df['Fecha_Local'].min()
     dias_totales = (max_fecha - min_fecha).days + 1
     
-    # Calcular el valor máximo permitido para el slider de forma segura
-    if dias_totales < 5:
-        max_slider = max(1, max_fecha.day)
-    else:
-        max_slider = max(5, dias_totales)
+    # Calcular el valor máximo permitido para el slider (asegurando un mínimo lógico de 5)
+    max_slider = max(5, dias_totales)
     
     # Selector deslizante (slider) interactivo de días
     dias_seleccionados = st.sidebar.slider(
@@ -135,10 +172,27 @@ if not df.empty:
     # Separar dataframes por tipo de sensor
     hydros_df = df_filtrado[df_filtrado['Sensor'].str.contains('CTD|Hydros', case=False, na=False)]
     soil_df = df_filtrado[df_filtrado['Sensor'].str.contains('5TE|5TM', case=False, na=False)]
-    system_df = df_filtrado[df_filtrado['Sensor'].str.contains('Battery|Barometer', case=False, na=False)]
+    system_df = df_filtrado[df_filtrado['Sensor'].str.contains('Battery|Barometer|Logger', case=False, na=False)]
     
-    colors_hydros = {"Estero": "#0284c7", "Pozo": "#f97316"}
-    colors_soil = {"Puerto 3": "#10b981", "Puerto 4": "#eab308", "Puerto 5": "#a855f7"}
+    # Buscamos la temperatura del datalogger para el histórico
+    logger_temp_df = df_filtrado[df_filtrado['Variable'].str.contains('Logger Temperature', case=False, na=False)]
+    
+    if not logger_temp_df.empty:
+        logger_temp_df = logger_temp_df.copy()
+        logger_temp_df['Ubicación'] = "Temperatura del aire (datalogger)"
+    
+    # Malla de seguridad para los colores: cubrimos los nombres finales y los crudos
+    colors_hydros = {
+        "Estero": "#0284c7", "Puerto 1": "#0284c7",
+        "Pozo": "#f97316", "Puerto 2": "#f97316",
+        "Temperatura del aire (datalogger)": "#64748b"
+    }
+    colors_soil = {
+        "Puerto 3": "#10b981", 
+        "Puerto 4": "#eab308", 
+        "Puerto 5": "#a855f7",
+        "Temperatura del aire (datalogger)": "#64748b"
+    }
     
     # Pestañas para las gráficas
     tab1, tab2, tab3 = st.tabs([
@@ -163,8 +217,11 @@ if not df.empty:
             with col2:
                 sub_temp = hydros_df[hydros_df['Variable'] == 'Water Temperature']
                 if not sub_temp.empty:
+                    if not logger_temp_df.empty:
+                        sub_temp = pd.concat([sub_temp, logger_temp_df], ignore_index=True)
+                    
                     unit_str = sub_temp['Unidad'].iloc[0]
-                    fig = crear_grafico_estilizado(sub_temp, "Temperatura del Agua", f"Temperatura ({unit_str})", colors_hydros)
+                    fig = crear_grafico_estilizado(sub_temp, "Temperatura del Agua vs Aire", f"Temperatura ({unit_str})", colors_hydros)
                     st.plotly_chart(fig, use_container_width=True)
                     
             with col3:
@@ -192,8 +249,11 @@ if not df.empty:
             with col2:
                 sub_st = soil_df[soil_df['Variable'] == 'Soil Temperature']
                 if not sub_st.empty:
+                    if not logger_temp_df.empty:
+                        sub_st = pd.concat([sub_st, logger_temp_df], ignore_index=True)
+                        
                     unit_str = sub_st['Unidad'].iloc[0]
-                    fig = crear_grafico_estilizado(sub_st, "Temperatura de Suelo", f"Temperatura ({unit_str})", colors_soil)
+                    fig = crear_grafico_estilizado(sub_st, "Temperatura de Suelo vs Aire", f"Temperatura ({unit_str})", colors_soil)
                     st.plotly_chart(fig, use_container_width=True)
                     
             with col3:
