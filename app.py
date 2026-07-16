@@ -12,7 +12,7 @@ st.set_page_config(page_title="Valle Hermoso - Monitoreo UdeC", layout="wide")
 st.title("🏔️ Estación de Monitoreo en Valle Hermoso")
 st.markdown("### **Grupo de Hidrología de Montaña UdeC**")
 
-# Bloque de metadatos del sitio
+# Bloque de metadatos del sitio (Actualizado a 5 días)
 col_meta1, col_meta2 = st.columns(2)
 with col_meta1:
     st.markdown("""
@@ -24,7 +24,7 @@ with col_meta2:
     st.markdown("""
     * **Sensores en Terreno:** Hydros 21 (CTD-10) en Estero/Pozo y Sensores de Suelo (5TE/5TM)
     * **Frecuencia de Actualización:** Tiempo real (API ZENTRA Cloud v4)
-    * **Rango Visualizado:** Máximo disponible en una única solicitud (Últimas ~2 semanas)
+    * **Rango Visualizado:** Últimos 5 días de registro (Límite de API estándar)
     """)
 
 st.markdown("---")
@@ -33,25 +33,24 @@ st.markdown("---")
 api_token = st.secrets.get("ZENTRA_TOKEN", "")
 device_sn = st.secrets.get("DEVICE_SN", "")
 
-# --- CONSULTA A LA API v4 (ESTRICTAMENTE UNA SOLA SOLICITUD PARA EVITAR 429) ---
+# --- CONSULTA A LA API v4 (UNA SOLA SOLICITUD ESTÁNDAR) ---
 @st.cache_data(ttl=900)
 def fetch_hydros_data_v4(token, sn):
     headers = {"Authorization": f"Token {token}"}
     end_time = datetime.utcnow()
-    start_time = end_time - timedelta(days=14)
+    # Solicitamos los últimos 5 días para coincidir exactamente con el volumen estándar de la API
+    start_time = end_time - timedelta(days=5)
     
     start_str = start_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
     end_str = end_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
     
     try:
-        # Hacemos una única solicitud solicitando un máximo de 3000 registros.
-        # Esto previene por completo el error 429 al no realizar peticiones consecutivas de página 2.
+        # Solicitud simple y limpia de una sola página con el límite estándar de 500 registros
         url = (
             f"https://zentracloud.com/api/v4/get_readings/?"
             f"device_sn={sn}&"
             f"start_date={start_str}&"
             f"end_date={end_str}&"
-            f"per_page=3000&"
             f"page_num=1"
         )
         
@@ -171,7 +170,7 @@ if api_token and device_sn:
             
             # PESTAÑA 1: HYDROS 21
             with tab1:
-                st.subheader("Monitoreo de la Columna de Agua")
+                st.subheader("Monitoreo de la Columna de Agua - Últimos 5 Días")
                 if not hydros_df.empty:
                     col1, col2, col3 = st.columns(3)
                     
@@ -200,7 +199,7 @@ if api_token and device_sn:
 
             # PESTAÑA 2: SENSORES DE SUELO
             with tab2:
-                st.subheader("Parámetros de Humedad y Temperatura de Suelo (Puertos 3, 4 y 5)")
+                st.subheader("Parámetros de Humedad y Temperatura de Suelo - Últimos 5 Días")
                 if not soil_df.empty:
                     col1, col2, col3 = st.columns(3)
                     
