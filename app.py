@@ -56,7 +56,9 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
         template="plotly_white"
     )
     
-    fig.update_traces(line=dict(width=2.5, shape='spline'), mode='lines')
+    # SE ELIMINÓ shape='spline' PARA EVITAR CRASHES CON SERIES DE DATOS INCOMPLETAS
+    fig.update_traces(line_width=2.5)
+    
     fig.update_layout(
         title=dict(text=titulo, font=dict(size=15, family="Arial", color="#1e293b"), x=0.0),
         hovermode="x unified",
@@ -80,7 +82,6 @@ if api_token and device_sn:
             for item in items:
                 metadata = item.get("metadata", {})
                 
-                # --- SANITIZACIÓN EXTREMA DE METADATOS PARA EVITAR CRASHES ---
                 port_raw = metadata.get("port_number")
                 port = str(port_raw) if port_raw is not None else "S/P"
                 
@@ -99,7 +100,6 @@ if api_token and device_sn:
                     if not raw_dt:
                         continue
                         
-                    # Conversión segura de fechas y eliminación de Timezone para evitar conflictos en Streamlit
                     timestamp = pd.to_datetime(raw_dt)
                     if timestamp.tzinfo is not None:
                         timestamp = timestamp.tz_localize(None)
@@ -109,7 +109,6 @@ if api_token and device_sn:
                         try:
                             val_float = float(val_raw)
                             if abs(val_float) < 9999:
-                                # Asignación de ubicaciones según puertos
                                 ubicacion = f"Puerto {port}"
                                 if sensor_model == "CTD-10":
                                     if port == "1":
@@ -129,21 +128,18 @@ if api_token and device_sn:
                                     "Unidad": unit
                                 })
                         except (ValueError, TypeError):
-                            pass # Ignora silenciosamente los valores no numéricos
+                            pass 
                             
         df = pd.DataFrame(records)
         
         if not df.empty:
-            # --- SEPARACIÓN DE VARIABLES SEGÚN SENSOR ---
             hydros_df = df[df['Sensor'].str.contains('CTD|Hydros', case=False, na=False)]
             soil_df = df[df['Sensor'].str.contains('5TE|5TM', case=False, na=False)]
             system_df = df[df['Sensor'].str.contains('Battery|Barometer', case=False, na=False)]
             
-            # --- PALETAS DE COLORES ---
             colors_hydros = {"Estero": "#0284c7", "Pozo": "#f97316"}
             colors_soil = {"Puerto 3": "#10b981", "Puerto 4": "#eab308", "Puerto 5": "#a855f7"}
             
-            # --- CREACIÓN DE PESTAÑAS ---
             tab1, tab2, tab3, tab4 = st.tabs([
                 "💧 Sensor Hydros 21 (Agua)", 
                 "🌱 Sensor 5TE / 5TM (Suelo)", 
@@ -151,7 +147,6 @@ if api_token and device_sn:
                 "📋 Tabla General"
             ])
             
-            # PESTAÑA 1: HYDROS 21
             with tab1:
                 st.subheader("Monitoreo de la Columna de Agua")
                 if not hydros_df.empty:
@@ -180,7 +175,6 @@ if api_token and device_sn:
                 else:
                     st.info("No se encontraron datos del sensor Hydros 21.")
 
-            # PESTAÑA 2: SENSORES DE SUELO
             with tab2:
                 st.subheader("Parámetros de Humedad y Temperatura de Suelo (Puertos 3, 4 y 5)")
                 if not soil_df.empty:
@@ -209,7 +203,6 @@ if api_token and device_sn:
                 else:
                     st.info("No se encontraron datos de los sensores de suelo (Puertos 3, 4 o 5).")
 
-            # PESTAÑA 3: DIAGNÓSTICO
             with tab3:
                 st.subheader("Parámetros de Diagnóstico y Presión de Referencia")
                 if not system_df.empty:
@@ -230,7 +223,6 @@ if api_token and device_sn:
                 else:
                     st.info("No se encontraron datos de diagnóstico del sistema.")
 
-            # PESTAÑA 4: TABLA GENERAL
             with tab4:
                 st.subheader("Visualización de Datos Consolidados")
                 df_sorted = df[['Fecha_Local', 'Puerto', 'Sensor', 'Ubicación', 'Variable', 'Valor', 'Unidad']].sort_values(by='Fecha_Local', ascending=False)
