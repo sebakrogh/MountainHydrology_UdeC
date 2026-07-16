@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 import plotly.express as px
 from datetime import datetime, timedelta
-from PIL import Image
+import os
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Valle Hermoso - Monitoreo UdeC", layout="wide")
@@ -32,23 +32,6 @@ st.markdown("---")
 # --- PARÁMETROS DESDE SECRETS ---
 api_token = st.secrets.get("ZENTRA_TOKEN", "")
 device_sn = st.secrets.get("DEVICE_SN", "")
-
-# --- BARRA LATERAL (Cargar Fotografía y Estado de Conexión) ---
-st.sidebar.header("📸 Visualización de Terreno")
-uploaded_file = st.sidebar.file_uploader(
-    "Sube una fotografía de la estación", 
-    type=["jpg", "jpeg", "png"],
-    help="La imagen se desplegará en la barra lateral para contextualizar el sitio de monitoreo."
-)
-
-if uploaded_file is not None:
-    try:
-        image = Image.open(uploaded_file)
-        st.sidebar.image(image, caption="Estación Valle Hermoso", use_container_width=True)
-    except Exception as e:
-        st.sidebar.error(f"No se pudo cargar la imagen: {e}")
-else:
-    st.sidebar.info("💡 Puedes subir una foto de la estación (.jpg o .png) para visualizarla aquí.")
 
 # --- CONSULTA A LA API v4 CON MANEJO DE ERRORES ---
 @st.cache_data(ttl=900)
@@ -175,6 +158,7 @@ if api_token and device_sn:
             colors_hydros = {"Estero": "#0284c7", "Pozo": "#f97316"}
             colors_soil = {"Puerto 3": "#10b981", "Puerto 4": "#eab308", "Puerto 5": "#a855f7"}
             
+            # Pestañas para las gráficas
             tab1, tab2, tab3, tab4 = st.tabs([
                 "💧 Sensor Hydros 21 (Agua)", 
                 "🌱 Sensor 5TE / 5TM (Suelo)", 
@@ -182,6 +166,7 @@ if api_token and device_sn:
                 "📋 Tabla General"
             ])
             
+            # PESTAÑA 1: HYDROS 21
             with tab1:
                 st.subheader("Monitoreo de la Columna de Agua")
                 if not hydros_df.empty:
@@ -210,6 +195,7 @@ if api_token and device_sn:
                 else:
                     st.info("No se encontraron datos del sensor Hydros 21.")
 
+            # PESTAÑA 2: SENSORES DE SUELO
             with tab2:
                 st.subheader("Parámetros de Humedad y Temperatura de Suelo (Puertos 3, 4 y 5)")
                 if not soil_df.empty:
@@ -238,6 +224,7 @@ if api_token and device_sn:
                 else:
                     st.info("No se encontraron datos de los sensores de suelo (Puertos 3, 4 o 5).")
 
+            # PESTAÑA 3: DIAGNÓSTICO
             with tab3:
                 st.subheader("Parámetros de Diagnóstico y Presión de Referencia")
                 if not system_df.empty:
@@ -258,6 +245,7 @@ if api_token and device_sn:
                 else:
                     st.info("No se encontraron datos de diagnóstico del sistema.")
 
+            # PESTAÑA 4: TABLA GENERAL
             with tab4:
                 st.subheader("Visualización de Datos Consolidados")
                 df_sorted = df[['Fecha_Local', 'Puerto', 'Sensor', 'Ubicación', 'Variable', 'Valor', 'Unidad']].sort_values(by='Fecha_Local', ascending=False)
@@ -269,3 +257,23 @@ if api_token and device_sn:
         st.error("No se pudo analizar el JSON de respuesta de ZENTRA. Asegúrate de que las credenciales son correctas.")
 else:
     st.info("Configura las credenciales `ZENTRA_TOKEN` y `DEVICE_SN` en los Secrets de Streamlit.")
+
+
+# --- SECCIÓN FIJA DE FOTOGRAFÍA AL FINAL DE LA PÁGINA ---
+st.markdown("---")
+st.subheader("📸 Registro Fotográfico del Sitio de Monitoreo")
+
+# Lista de extensiones comunes para buscar el archivo en tu repositorio de GitHub
+imagen_encontrada = False
+for ext in ["jpg", "jpeg", "png", "JPG", "PNG"]:
+    path_imagen = f"estacion.{ext}"
+    if os.path.exists(path_imagen):
+        # Desplegar la imagen centrada con ancho mediano/grande
+        col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
+        with col_img2:
+            st.image(path_imagen, caption="Estación Meteorológica en Valle Hermoso (1576 msnm)", use_container_width=True)
+        imagen_encontrada = True
+        break
+
+if not imagen_encontrada:
+    st.info("💡 Para mostrar una fotografía fija aquí, sube un archivo de imagen llamado **'estacion.HEIC'** o **'estacion.png'** directamente a la carpeta raíz de tu repositorio en GitHub.")
