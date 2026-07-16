@@ -31,7 +31,7 @@ with col_meta2:
 st.markdown("---")
 
 # --- CONEXIÓN DE SEGURIDAD A GOOGLE SHEETS ---
-@st.cache_data(ttl=600)  # Almacena en caché los datos por 10 minutos para que sea ultrarrápido
+@st.cache_data(ttl=600)  # Almacena en caché los datos por 10 minutos
 def cargar_datos_historicos():
     try:
         # Obtener las credenciales desde los secrets de Streamlit
@@ -43,6 +43,12 @@ def cargar_datos_historicos():
             return pd.DataFrame()
             
         creds_dict = json.loads(google_creds_str)
+        
+        # --- SOLUCIÓN AL ERROR DE PEM / PADDING ---
+        # Asegura que las secuencias de texto '\n' se conviertan en verdaderos saltos de línea físicos
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
