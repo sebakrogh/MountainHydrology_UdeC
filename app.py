@@ -158,12 +158,11 @@ if api_token and device_sn:
             colors_hydros = {"Estero": "#0284c7", "Pozo": "#f97316"}
             colors_soil = {"Puerto 3": "#10b981", "Puerto 4": "#eab308", "Puerto 5": "#a855f7"}
             
-            # Pestañas para las gráficas
-            tab1, tab2, tab3, tab4 = st.tabs([
+            # Pestañas para las gráficas (se eliminó la cuarta pestaña)
+            tab1, tab2, tab3 = st.tabs([
                 "💧 Sensor Hydros 21 (Agua)", 
                 "🌱 Sensor 5TE / 5TM (Suelo)", 
-                "🔋 Estado del Sistema", 
-                "📋 Tabla General"
+                "🔋 Estado del Sistema"
             ])
             
             # PESTAÑA 1: HYDROS 21
@@ -244,12 +243,6 @@ if api_token and device_sn:
                             st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No se encontraron datos de diagnóstico del sistema.")
-
-            # PESTAÑA 4: TABLA GENERAL
-            with tab4:
-                st.subheader("Visualización de Datos Consolidados")
-                df_sorted = df[['Fecha_Local', 'Puerto', 'Sensor', 'Ubicación', 'Variable', 'Valor', 'Unidad']].sort_values(by='Fecha_Local', ascending=False)
-                st.dataframe(df_sorted, use_container_width=True)
                 
         else:
             st.warning("No se encontraron registros numéricos válidos en la respuesta de ZENTRA.")
@@ -271,9 +264,9 @@ for ext in ["jpg", "jpeg", "png", "JPG", "PNG"]:
         # Desplegar la imagen centrada con ancho mediano/grande
         col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
         with col_img2:
-            st.image(path_imagen, caption="Estación Fluviométrica en Valle Hermoso (1576 msnm)", use_container_width=True)
+            st.image(path_imagen, caption="Estación Meteorológica en Valle Hermoso (1576 msnm)", use_container_width=True)
         imagen_encontrada = True
         break
 
 if not imagen_encontrada:
-    st.info("💡 Para mostrar una fotografía fija aquí, sube un archivo de imagen llamado **'estacion.HEIC'** o **'estacion.png'** directamente a la carpeta raíz de tu repositorio en GitHub.")
+    st.info("💡 Para mostrar una fotografía fija aquí, sube un archivo de imagen llamado **'estacion.jpg'** o **'estacion.png'** directamente a la carpeta raíz de tu repositorio en GitHub.")
