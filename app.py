@@ -158,7 +158,7 @@ if api_token and device_sn:
             colors_hydros = {"Estero": "#0284c7", "Pozo": "#f97316"}
             colors_soil = {"Puerto 3": "#10b981", "Puerto 4": "#eab308", "Puerto 5": "#a855f7"}
             
-            # Pestañas para las gráficas (se eliminó la cuarta pestaña)
+            # Pestañas para las gráficas
             tab1, tab2, tab3 = st.tabs([
                 "💧 Sensor Hydros 21 (Agua)", 
                 "🌱 Sensor 5TE / 5TM (Suelo)", 
@@ -256,15 +256,14 @@ else:
 st.markdown("---")
 st.subheader("📸 Registro Fotográfico del Sitio de Monitoreo")
 
-# Lista de extensiones comunes para buscar el archivo en tu repositorio de GitHub
 imagen_encontrada = False
 for ext in ["jpg", "jpeg", "png", "JPG", "PNG"]:
     path_imagen = f"estacion.{ext}"
     if os.path.exists(path_imagen):
-        # Desplegar la imagen centrada con ancho mediano/grande
         col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
         with col_img2:
-            st.image(path_imagen, caption="Estación Meteorológica en Valle Hermoso (1576 msnm)", use_container_width=True)
+            # Título corregido aquí: "Estación Fluviométrica"
+            st.image(path_imagen, caption="Estación Fluviométrica en Valle Hermoso (1576 msnm)", use_container_width=True)
         imagen_encontrada = True
         break
 
