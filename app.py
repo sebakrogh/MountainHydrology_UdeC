@@ -24,7 +24,7 @@ with col_meta2:
     st.markdown("""
     * **Sensores en Terreno:** Hydros 21 (CTD-10) en Estero/Pozo y Sensores de Suelo (5TE/5TM)
     * **Frecuencia de Actualización:** Tiempo real (API ZENTRA Cloud v4)
-    * **Rango Visualizado:** Últimas 2 semanas
+    * **Rango Visualizado:** Últimas 2 semanas (Paginado)
     """)
 
 st.markdown("---")
@@ -33,35 +33,84 @@ st.markdown("---")
 api_token = st.secrets.get("ZENTRA_TOKEN", "")
 device_sn = st.secrets.get("DEVICE_SN", "")
 
-# --- CONSULTA A LA API v4 CON MANEJO DE ERRORES ---
+# --- CONSULTA A LA API v4 CON PAGINACIÓN AUTOMÁTICA (ÚLTIMAS 2 SEMANAS) ---
 @st.cache_data(ttl=900)
 def fetch_hydros_data_v4(token, sn):
-    try:
-        headers = {"Authorization": f"Token {token}"}
-        end_time = datetime.utcnow()
-        start_time = end_time - timedelta(days=14)
-        
-        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
-        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
-        
-        url = (
-            f"https://zentracloud.com/api/v4/get_readings/?"
-            f"device_sn={sn}&"
-            f"start_date={start_str}&"
-            f"end_date={end_str}"
-        )
-        
-        response = requests.get(url, headers=headers, timeout=20)
-        
-        if response.status_code == 200:
-            return response.json()
-        else:
-            st.error(f"Error devuelto por la API ZENTRA ({response.status_code}): {response.text}")
-            return None
+    headers = {"Authorization": f"Token {token}"}
+    end_time = datetime.utcnow()
+    start_time = end_time - timedelta(days=14)
+    
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S").replace(" ", "%20")
+    
+    aggregated_data = {}
+    page_num = 1
+    max_paginas = 5  # Límite de seguridad para evitar solicitudes infinitas
+    
+    while page_num <= max_paginas:
+        try:
+            # Construimos la URL agregando la variable de página activa
+            url = (
+                f"https://zentracloud.com/api/v4/get_readings/?"
+                f"device_sn={sn}&"
+                f"start_date={start_str}&"
+                f"end_date={end_str}&"
+                f"page_num={page_num}"
+            )
             
-    except Exception as e:
-        st.error(f"Error de conexión con el servidor: {e}")
-        return None
+            response = requests.get(url, headers=headers, timeout=20)
+            
+            if response.status_code != 200:
+                st.error(f"Error devuelto por la API ZENTRA ({response.status_code}) en pág. {page_num}: {response.text}")
+                break
+                
+            json_response = response.json()
+            page_data = json_response.get("data", {})
+            
+            if not page_data:
+                break  # Detener el bucle si la página viene vacía
+                
+            # Combinar los datos de esta página con los de las anteriores
+            for variable, sensor_blocks in page_data.items():
+                if variable not in aggregated_data:
+                    aggregated_data[variable] = []
+                    
+                for block in sensor_blocks:
+                    metadata = block.get("metadata", {})
+                    port = metadata.get("port_number")
+                    sensor_name = metadata.get("sensor_name")
+                    readings = block.get("readings", [])
+                    
+                    # Buscar si este sensor ya está registrado en nuestro consolidado
+                    found = False
+                    for existing_block in aggregated_data[variable]:
+                        existing_meta = existing_block.get("metadata", {})
+                        if existing_meta.get("port_number") == port and existing_meta.get("sensor_name") == sensor_name:
+                            existing_block["readings"].extend(readings)
+                            found = True
+                            break
+                            
+                    if not found:
+                        aggregated_data[variable].append({
+                            "metadata": metadata,
+                            "readings": list(readings)
+                        })
+            
+            # Verificar si existe una página siguiente en la paginación de ZENTRA
+            pagination = json_response.get("pagination", {})
+            next_url = pagination.get("next_url")
+            
+            if next_url:
+                page_num += 1
+            else:
+                break  # Salir si es la última página disponible
+                
+        except Exception as e:
+            st.error(f"Error de conexión con el servidor en página {page_num}: {e}")
+            break
+            
+    # Devolvemos la estructura final unificada con el formato esperado por la app
+    return {"data": aggregated_data} if aggregated_data else None
 
 # --- FUNCIÓN PARA GRÁFICOS MULTI-LÍNEA ESTILIZADOS ---
 def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
@@ -262,7 +311,6 @@ for ext in ["jpg", "jpeg", "png", "JPG", "PNG"]:
     if os.path.exists(path_imagen):
         col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
         with col_img2:
-            # Título corregido aquí: "Estación Fluviométrica"
             st.image(path_imagen, caption="Estación Fluviométrica en Valle Hermoso (1576 msnm)", use_container_width=True)
         imagen_encontrada = True
         break
