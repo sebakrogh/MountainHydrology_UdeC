@@ -107,11 +107,17 @@ if not df.empty:
     min_fecha = df['Fecha_Local'].min()
     dias_totales = (max_fecha - min_fecha).days + 1
     
+    # Calcular el valor máximo permitido para el slider de forma segura
+    if dias_totales < 5:
+        max_slider = max(1, max_fecha.day)
+    else:
+        max_slider = max(5, dias_totales)
+    
     # Selector deslizante (slider) interactivo de días
     dias_seleccionados = st.sidebar.slider(
         "Días a visualizar en los gráficos",
         min_value=1,
-        max_value=max_fecha.day if dias_totales < 5 else max_val_safe := max(5, dias_totales),
+        max_value=max_slider,
         value=min(5, dias_totales),
         help="Elige cuántos días del histórico hacia atrás deseas graficar en pantalla."
     )
