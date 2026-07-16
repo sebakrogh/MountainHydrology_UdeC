@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 import gspread
 from google.oauth2.service_account import Credentials
-import json
 import os
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -34,18 +33,18 @@ st.markdown("---")
 @st.cache_data(ttl=600)  # Almacena en caché los datos por 10 minutos
 def cargar_datos_historicos():
     try:
-        # Recuperamos la línea plana de texto de los secrets
-        google_creds_raw = st.secrets.get("GOOGLE_CREDS_RAW")
+        # Recuperamos las credenciales estructuradas de los secrets
+        creds_dict = st.secrets.get("gspread_creds")
         sheet_id = st.secrets.get("HISTORICO_SHEETS_ID")
         
-        if not google_creds_raw or not sheet_id:
-            st.error("Faltan configurar las variables GOOGLE_CREDS_RAW o HISTORICO_SHEETS_ID en los Secrets.")
+        if not creds_dict or not sheet_id:
+            st.error("Faltan configurar las variables 'gspread_creds' o 'HISTORICO_SHEETS_ID' en los Secrets de Streamlit.")
             return pd.DataFrame()
             
-        # Transformamos el texto plano a un diccionario de Python
-        creds_dict = json.loads(google_creds_raw)
+        # Convertir creds_dict (que es un objeto de Streamlit) a un diccionario estándar de Python
+        creds_dict = dict(creds_dict)
         
-        # Corregimos de forma interna los saltos de línea físicos de la clave PEM
+        # Corregir de forma segura los saltos de línea físicos de la clave PEM
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
         
