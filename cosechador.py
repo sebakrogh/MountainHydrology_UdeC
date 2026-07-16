@@ -12,17 +12,17 @@ jobs:
 
     steps:
     - name: Checkout del repositorio
-      uses: actions/checkout@v4 # Actualizado de v3 a v4 para Node.js 24
+      uses: actions/checkout@v4
 
     - name: Configurar Python
-      uses: actions/setup-python@v5 # Actualizado de v4 a v5 para Node.js 24
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
     - name: Instalar dependencias
       run: |
         python -m pip install --upgrade pip
-        pip install requests pandas gspread google-oauth2-service-account
+        pip install requests pandas gspread google-auth
 
     - name: Ejecutar script de cosecha
       env:
