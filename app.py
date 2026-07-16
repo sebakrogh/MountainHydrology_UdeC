@@ -62,61 +62,56 @@ def fetch_hydros_data_v4(token, sn):
         return None
 
 # --- FUNCIÓN PARA GRÁFICOS MULTI-LÍNEA ESTILIZADOS ---
-def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None, es_temperatura=False):
+def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
     fig = px.line(
         df_var, 
         x='Fecha_Local', 
         y='Valor', 
         color='Ubicación',
         color_discrete_map=color_map,
-        labels={'Fecha_Local': 'Fecha y Hora', 'Valor': y_label, 'Ubicación': 'Ubicación / Estación'},
+        labels={'Valor': y_label, 'Ubicación': 'Ubicación / Estación'},
         template="plotly_white"
     )
     
     fig.update_traces(line_width=2.5)
     
-    # Configuración base del layout
+    # Configuración limpia del layout
     fig.update_layout(
         title=dict(
             text=titulo, 
             font=dict(size=14, family="Arial", color="#1e293b"), 
             x=0.0,
-            y=0.95  # Eleva levemente el título para separarlo del gráfico
+            y=0.95
         ),
         hovermode="x unified",
-        margin=dict(l=40, r=20, t=75, b=40),  # Mayor margen superior para evitar colisiones
+        # Espacio generoso arriba para el título y abajo para la leyenda
+        margin=dict(l=40, r=20, t=75, b=60),  
         height=400,
-        xaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1'),
-        yaxis=dict(showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', zeroline=False)
+        # Eliminamos el rótulo inferior 'Fecha_Local' de manera explícita (title=None)
+        xaxis=dict(
+            title=None,
+            showgrid=True, 
+            gridcolor='#f1f5f9', 
+            tickformat="%d %b\n%H:%M", 
+            linecolor='#cbd5e1'
+        ),
+        yaxis=dict(
+            title=dict(text=y_label, font=dict(size=12)),
+            showgrid=True, 
+            gridcolor='#f1f5f9', 
+            linecolor='#cbd5e1', 
+            zeroline=False
+        ),
+        # Todas las leyendas se muestran horizontales y centradas abajo, fuera del gráfico
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.22,  # Posicionamiento perfecto bajo las etiquetas del eje X
+            xanchor="center",
+            x=0.5,
+            title=dict(text="")
+        )
     )
-
-    # Posicionamiento específico de las leyendas
-    if es_temperatura:
-        # Ubica la leyenda dentro del área de trazado en la esquina superior derecha
-        fig.update_layout(
-            legend=dict(
-                yanchor="top",
-                y=0.98,
-                xanchor="right",
-                x=0.98,
-                bgcolor="rgba(255, 255, 255, 0.8)",  # Fondo semitransparente para que no tape las líneas traseras
-                bordercolor="#e2e8f0",
-                borderwidth=1,
-                title=dict(text="")
-            )
-        )
-    else:
-        # Para los demás gráficos, ubica la leyenda de forma externa y horizontal bajo el gráfico
-        fig.update_layout(
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=-0.22,  # Lo desplaza hacia abajo del eje X
-                xanchor="center",
-                x=0.5,
-                title=dict(text="")
-            )
-        )
         
     return fig
 
@@ -221,7 +216,7 @@ if api_token and device_sn:
                         sub_depth = hydros_df[hydros_df['Variable'] == 'Water Level']
                         if not sub_depth.empty:
                             unit_str = sub_depth['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_depth, "Nivel de Agua", f"Profundidad ({unit_str})", colors_hydros, es_temperatura=False)
+                            fig = crear_grafico_estilizado(sub_depth, "Nivel de Agua", f"Profundidad ({unit_str})", colors_hydros)
                             st.plotly_chart(fig, use_container_width=True)
                             
                     with col2:
@@ -231,15 +226,14 @@ if api_token and device_sn:
                                 sub_temp = pd.concat([sub_temp, logger_temp_df], ignore_index=True)
                             
                             unit_str = sub_temp['Unidad'].iloc[0]
-                            # Habilitamos bandera 'es_temperatura=True' para ubicar la leyenda adentro a la derecha
-                            fig = crear_grafico_estilizado(sub_temp, "Temperatura del Agua vs Aire", f"Temperatura ({unit_str})", colors_hydros, es_temperatura=True)
+                            fig = crear_grafico_estilizado(sub_temp, "Temperatura del Agua vs Aire", f"Temperatura ({unit_str})", colors_hydros)
                             st.plotly_chart(fig, use_container_width=True)
                             
                     with col3:
                         sub_ec = hydros_df[hydros_df['Variable'] == 'EC']
                         if not sub_ec.empty:
                             unit_str = sub_ec['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_ec, "Conductividad Eléctrica", f"Conductividad ({unit_str})", colors_hydros, es_temperatura=False)
+                            fig = crear_grafico_estilizado(sub_ec, "Conductividad Eléctrica", f"Conductividad ({unit_str})", colors_hydros)
                             st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No se encontraron datos del sensor Hydros 21.")
@@ -254,7 +248,7 @@ if api_token and device_sn:
                         sub_wc = soil_df[soil_df['Variable'] == 'Water Content']
                         if not sub_wc.empty:
                             unit_str = sub_wc['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_wc, "Contenido Volumétrico de Agua", f"Humedad ({unit_str})", colors_soil, es_temperatura=False)
+                            fig = crear_grafico_estilizado(sub_wc, "Contenido Volumétrico de Agua", f"Humedad ({unit_str})", colors_soil)
                             st.plotly_chart(fig, use_container_width=True)
                     
                     with col2:
@@ -264,15 +258,14 @@ if api_token and device_sn:
                                 sub_st = pd.concat([sub_st, logger_temp_df], ignore_index=True)
                                 
                             unit_str = sub_st['Unidad'].iloc[0]
-                            # Habilitamos bandera 'es_temperatura=True' para ubicar la leyenda adentro a la derecha
-                            fig = crear_grafico_estilizado(sub_st, "Temperatura de Suelo vs Aire", f"Temperatura ({unit_str})", colors_soil, es_temperatura=True)
+                            fig = crear_grafico_estilizado(sub_st, "Temperatura de Suelo vs Aire", f"Temperatura ({unit_str})", colors_soil)
                             st.plotly_chart(fig, use_container_width=True)
                             
                     with col3:
                         sub_sec = soil_df[soil_df['Variable'] == 'Saturation Extract EC']
                         if not sub_sec.empty:
                             unit_str = sub_sec['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_sec, "EC Extracto Saturación", f"Salinidad ({unit_str})", colors_soil, es_temperatura=False)
+                            fig = crear_grafico_estilizado(sub_sec, "EC Extracto Saturación", f"Salinidad ({unit_str})", colors_soil)
                             st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No se encontraron datos de los sensores de suelo (Puertos 3, 4 o 5).")
@@ -286,14 +279,14 @@ if api_token and device_sn:
                     with col1:
                         sub_bat = system_df[system_df['Variable'] == 'Battery Percent']
                         if not sub_bat.empty:
-                            fig = crear_grafico_estilizado(sub_bat, "Nivel de Batería", "Porcentaje (%)", {"Puerto 7": "#e11d48"}, es_temperatura=False)
+                            fig = crear_grafico_estilizado(sub_bat, "Nivel de Batería", "Porcentaje (%)", {"Puerto 7": "#e11d48"})
                             st.plotly_chart(fig, use_container_width=True)
                             
                     with col2:
                         sub_pres = system_df[system_df['Variable'] == 'Reference Pressure']
                         if not sub_pres.empty:
                             unit_str = sub_pres['Unidad'].iloc[0]
-                            fig = crear_grafico_estilizado(sub_pres, "Presión Atmosférica de Referencia", f"Presión ({unit_str})", {"Puerto 8": "#475569"}, es_temperatura=False)
+                            fig = crear_grafico_estilizado(sub_pres, "Presión Atmosférica de Referencia", f"Presión ({unit_str})", {"Puerto 8": "#475569"})
                             st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No se encontraron datos de diagnóstico del sistema.")
