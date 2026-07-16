@@ -271,7 +271,7 @@ for ext in ["jpg", "jpeg", "png", "JPG", "PNG"]:
         # Desplegar la imagen centrada con ancho mediano/grande
         col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
         with col_img2:
-            st.image(path_imagen, caption="Estación Meteorológica en Valle Hermoso (1576 msnm)", use_container_width=True)
+            st.image(path_imagen, caption="Estación Fluviométrica en Valle Hermoso (1576 msnm)", use_container_width=True)
         imagen_encontrada = True
         break
 
