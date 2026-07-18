@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 import gspread
 from google.oauth2.service_account import Credentials
+import json
+import base64
 import os
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -29,45 +31,30 @@ with col_meta2:
 
 st.markdown("---")
 
-# --- CONEXIÓN DE SEGURIDAD A GOOGLE SHEETS ---
+# --- CONEXIÓN DE SEGURIDAD A GOOGLE SHEETS (MÉTODO BASE64) ---
 @st.cache_data(ttl=600)  # Almacena en caché los datos por 10 minutos
 def cargar_datos_historicos():
     try:
-        # Recuperamos las credenciales estructuradas de los secrets
-        creds_dict = st.secrets.get("gspread_creds")
+        # Recuperamos la cápsula Base64 y el ID de la hoja desde los Secrets
+        b64_creds = st.secrets.get("B64_CREDS")
         sheet_id = st.secrets.get("HISTORICO_SHEETS_ID")
         
-        if not creds_dict or not sheet_id:
-            st.error("Faltan configurar las variables 'gspread_creds' o 'HISTORICO_SHEETS_ID' en los Secrets de Streamlit.")
+        if not b64_creds or not sheet_id:
+            st.error("Faltan configurar las variables 'B64_CREDS' o 'HISTORICO_SHEETS_ID' en los Secrets de Streamlit.")
             return pd.DataFrame()
             
-        # Convertir creds_dict a un diccionario estándar de Python para poder modificarlo
-        creds_dict = dict(creds_dict)
+        # 1. Decodificamos la cápsula binaria de vuelta a texto plano JSON
+        creds_json_str = base64.b64decode(b64_creds).decode('utf-8')
         
-        # --- ALGORITMO ROBUSTO DE CURACIÓN DE CLAVE PRIVADA ---
-        if "private_key" in creds_dict:
-            pk = creds_dict["private_key"]
-            
-            # 1. Asegurar que las barras invertidas dobles \\n se transformen en salto de línea real
-            pk = pk.replace("\\\\n", "\n")
-            # 2. Asegurar que las barras invertidas simples \n se transformen en salto de línea real
-            pk = pk.replace("\\n", "\n")
-            
-            # 3. Corrección extrema: Si Streamlit aplanó el texto y eliminó los saltos de línea internos,
-            # reconstruimos la estructura PEM con saltos de línea reales cada vez que termine una sección.
-            if "-----BEGIN PRIVATE KEY-----" in pk and "\n" not in pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", ""):
-                body = pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").strip()
-                body = "".join(body.split())  # Quitamos espacios en blanco indeseados
-                lines = [body[i:i+64] for i in range(0, len(body), 64)] # Cortamos a 64 caracteres (Estándar de Google)
-                pk = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(lines) + "\n-----END PRIVATE KEY-----\n"
-                
-            creds_dict["private_key"] = pk
+        # 2. Convertimos el texto JSON en un diccionario nativo de Python
+        creds_dict = json.loads(creds_json_str)
         
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
         ]
         
+        # 3. Autenticación directa a la API de Google sin problemas de formato PEM
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         
@@ -115,10 +102,10 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
             y=0.95
         ),
         hovermode="x unified",
-        margin=dict(l=40, r=20, t=75, b=80),  # Aumentado el margen 'b' para evitar recortes en la leyenda
+        margin=dict(l=40, r=20, t=75, b=80),  # Margen inferior amplio para la leyenda externa
         height=400,
         xaxis=dict(
-            title=None,
+            title=None,  # Eliminamos el rótulo redundante de Fecha_Local
             showgrid=True, 
             gridcolor='#f1f5f9', 
             tickformat="%d %b\n%H:%M", 
@@ -134,7 +121,7 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
         legend=dict(
             orientation="h",
             yanchor="top",
-            y=-0.22,  
+            y=-0.22,  # Ubica la leyenda perfectamente centrada debajo de las etiquetas del eje X
             xanchor="center",
             x=0.5,
             title=dict(text="")
@@ -153,7 +140,7 @@ if not df.empty:
     min_fecha = df['Fecha_Local'].min()
     dias_totales = (max_fecha - min_fecha).days + 1
     
-    # Calcular el valor máximo permitido para el slider (asegurando un mínimo lógico de 5)
+    # Calcular el valor máximo permitido para el slider (mínimo de seguridad de 5 días)
     max_slider = max(5, dias_totales)
     
     # Selector deslizante (slider) interactivo de días
@@ -174,14 +161,14 @@ if not df.empty:
     soil_df = df_filtrado[df_filtrado['Sensor'].str.contains('5TE|5TM', case=False, na=False)]
     system_df = df_filtrado[df_filtrado['Sensor'].str.contains('Battery|Barometer|Logger', case=False, na=False)]
     
-    # Buscamos la temperatura del datalogger para el histórico
+    # Buscamos la temperatura del datalogger para el contexto histórico
     logger_temp_df = df_filtrado[df_filtrado['Variable'].str.contains('Logger Temperature', case=False, na=False)]
     
     if not logger_temp_df.empty:
         logger_temp_df = logger_temp_df.copy()
         logger_temp_df['Ubicación'] = "Temperatura del aire (datalogger)"
     
-    # Malla de seguridad para los colores: cubrimos los nombres finales y los crudos
+    # Malla de seguridad para los colores (cubre nombres formateados y crudos de la base de datos)
     colors_hydros = {
         "Estero": "#0284c7", "Puerto 1": "#0284c7",
         "Pozo": "#f97316", "Puerto 2": "#f97316",
@@ -201,7 +188,7 @@ if not df.empty:
         "🔋 Estado del Sistema"
     ])
     
-    # PESTAÑA 1: HYDROS 21
+    # PESTAÑA 1: HYDROS 21 (AGUA)
     with tab1:
         st.subheader(f"Monitoreo de la Columna de Agua - Últimos {dias_seleccionados} días")
         if not hydros_df.empty:
@@ -265,7 +252,7 @@ if not df.empty:
         else:
             st.info("No se encontraron datos de los sensores de suelo en este periodo.")
 
-    # PESTAÑA 3: DIAGNÓSTICO
+    # PESTAÑA 3: DIAGNÓSTICO DEL SISTEMA
     with tab3:
         st.subheader(f"Parámetros de Diagnóstico y Referencia - Últimos {dias_seleccionados} días")
         if not system_df.empty:
