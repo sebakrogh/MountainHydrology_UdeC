@@ -25,7 +25,6 @@ with col_meta1:
 with col_meta2:
     st.markdown("""
     * **Sensores en Terreno:** Hydros 21 (CTD-10) en Estero/Pozo y Sensores de Suelo (5TE/5TM)
-    * **Base de Datos:** Histórica almacenada en Google Sheets
     * **Actualización:** Automática (Cosechador GitHub Actions todos los días a las 00:00)
     """)
 
