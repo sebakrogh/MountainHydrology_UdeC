@@ -19,12 +19,13 @@ col_meta1, col_meta2 = st.columns(2)
 with col_meta1:
     st.markdown("""
     * **Elevación:** 1576 msnm
-    * **Proyecto:** Fondecyt Regular 1261545
+    * **Financiamiento:** Fondecyt Regular 1261545
     * **Investigador Principal (IP):** Sebastian Krogh
     """)
 with col_meta2:
     st.markdown("""
     * **Sensores en Terreno:** Hydros 21 (CTD-10) en Estero/Pozo y Sensores de Suelo (5TE/5TM)
+    * **Base de Datos:** Histórica almacenada en Google Sheets
     * **Actualización:** Automática (Cosechador GitHub Actions todos los días a las 00:00)
     """)
 
@@ -34,7 +35,6 @@ st.markdown("---")
 @st.cache_data(ttl=600)  # Almacena en caché los datos por 10 minutos
 def cargar_datos_historicos():
     try:
-        # Recuperamos la cápsula Base64 y el ID de la hoja desde los Secrets
         b64_creds = st.secrets.get("B64_CREDS")
         sheet_id = st.secrets.get("HISTORICO_SHEETS_ID")
         
@@ -42,10 +42,7 @@ def cargar_datos_historicos():
             st.error("Faltan configurar las variables 'B64_CREDS' o 'HISTORICO_SHEETS_ID' en los Secrets de Streamlit.")
             return pd.DataFrame()
             
-        # 1. Decodificamos la cápsula binaria de vuelta a texto plano JSON
         creds_json_str = base64.b64decode(b64_creds).decode('utf-8')
-        
-        # 2. Convertimos el texto JSON en un diccionario nativo de Python
         creds_dict = json.loads(creds_json_str)
         
         scopes = [
@@ -53,11 +50,9 @@ def cargar_datos_historicos():
             "https://www.googleapis.com/auth/drive"
         ]
         
-        # 3. Autenticación directa a la API de Google sin problemas de formato PEM
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         
-        # Conectar a la hoja y descargar todas las filas
         sheet = client.open_by_key(sheet_id).sheet1
         records = sheet.get_all_records()
         
@@ -101,10 +96,10 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
             y=0.95
         ),
         hovermode="x unified",
-        margin=dict(l=40, r=20, t=75, b=80),  # Margen inferior amplio para la leyenda externa
+        margin=dict(l=40, r=20, t=75, b=80),  
         height=400,
         xaxis=dict(
-            title=None,  # Eliminamos el rótulo redundante de Fecha_Local
+            title=None,
             showgrid=True, 
             gridcolor='#f1f5f9', 
             tickformat="%d %b\n%H:%M", 
@@ -120,7 +115,7 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
         legend=dict(
             orientation="h",
             yanchor="top",
-            y=-0.22,  # Ubica la leyenda perfectamente centrada debajo de las etiquetas del eje X
+            y=-0.22,  
             xanchor="center",
             x=0.5,
             title=dict(text="")
@@ -131,43 +126,93 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
 
 # --- PROCESAMIENTO Y FILTROS EN PÁGINA ---
 if not df.empty:
-    # --- BARRA LATERAL: SELECTOR TEMPORAL ---
-    st.sidebar.header("🗓️ Rango Temporal")
+    # --- BARRA LATERAL: SELECTOR TEMPORAL ESTILO ZENTRA ---
+    st.sidebar.header("🗓️ Rango Temporal (Zentra Style)")
     
-    # Determinar rango máximo de fechas en la base de datos de forma robusta
+    # Determinar extremos reales de la base de datos
     max_fecha = df['Fecha_Local'].max()
     min_fecha = df['Fecha_Local'].min()
-    dias_totales = (max_fecha - min_fecha).days + 1
     
-    # Calcular el valor máximo permitido para el slider (mínimo de seguridad de 5 días)
-    max_slider = max(5, dias_totales)
+    # Opciones del menú desplegable basándonos en tu imagen
+    opciones_rango = [
+        "24H", "2D", "1W", "2W", "1M", "3M", "6M", "1Y", 
+        "Rolling Range", "Fixed Start Date", "Fixed Date Range"
+    ]
     
-    # Selector deslizante (slider) interactivo de días
-    dias_seleccionados = st.sidebar.slider(
-        "Días a visualizar en los gráficos",
-        min_value=1,
-        max_value=max_slider,
-        value=min(5, dias_totales),
-        help="Elige cuántos días del histórico hacia atrás deseas graficar en pantalla."
+    seleccion = st.sidebar.selectbox(
+        "Selecciona el intervalo de visualización:",
+        options=opciones_rango,
+        index=3, # Por defecto inicializa en '2W' (2 semanas) igual que tu captura
     )
     
-    # Filtrar el dataframe según el rango seleccionado
-    limite_tiempo = max_fecha - pd.Timedelta(days=dias_seleccionados)
-    df_filtrado = df[df['Fecha_Local'] >= limite_tiempo]
+    # Lógica de filtrado de acuerdo a la opción seleccionada
+    fecha_inicio_filtro = max_fecha
+    fecha_fin_filtro = max_fecha
+    
+    if seleccion == "24H":
+        fecha_inicio_filtro = max_fecha - pd.Timedelta(hours=24)
+    elif seleccion == "2D":
+        fecha_inicio_filtro = max_fecha - pd.Timedelta(days=2)
+    elif seleccion == "1W":
+        fecha_inicio_filtro = max_fecha - pd.Timedelta(weeks=1)
+    elif seleccion == "2W":
+        fecha_inicio_filtro = max_fecha - pd.Timedelta(weeks=2)
+    elif seleccion == "1M":
+        fecha_inicio_filtro = max_fecha - pd.Timedelta(days=30)
+    elif seleccion == "3M":
+        fecha_inicio_filtro = max_fecha - pd.Timedelta(days=90)
+    elif seleccion == "6M":
+        fecha_inicio_filtro = max_fecha - pd.Timedelta(days=180)
+    elif seleccion == "1Y":
+        fecha_inicio_filtro = max_fecha - pd.Timedelta(days=365)
+    elif seleccion == "Rolling Range":
+        # Muestra todo el registro completo de la base de datos de manera dinámica
+        fecha_inicio_filtro = min_fecha
+        
+    elif seleccion == "Fixed Start Date":
+        # Despliega calendario para definir solo la fecha de inicio fija
+        st.sidebar.markdown("---")
+        fecha_manual_ini = st.sidebar.date_input(
+            "Fecha de inicio fija:", 
+            value=min_fecha.date(),
+            min_value=min_fecha.date(),
+            max_value=max_fecha.date()
+        )
+        fecha_inicio_filtro = pd.to_datetime(fecha_manual_ini)
+        
+    elif seleccion == "Fixed Date Range":
+        # Despliega calendario interactivo de rango cerrado (Inicio y Fin)
+        st.sidebar.markdown("---")
+        rango_fechas = st.sidebar.date_input(
+            "Selecciona el rango (Inicio - Fin):",
+            value=(min_fecha.date(), max_fecha.date()),
+            min_value=min_fecha.date(),
+            max_value=max_fecha.date()
+        )
+        # Control de seguridad por si el usuario hace clic solo en una fecha del rango
+        if isinstance(rango_fechas, tuple) and len(rango_fechas) == 2:
+            fecha_inicio_filtro = pd.to_datetime(rango_fechas[0])
+            fecha_fin_filtro = pd.to_datetime(rango_fechas[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        else:
+            fecha_inicio_filtro = pd.to_datetime(rango_fechas[0])
 
-    # Separar dataframes por tipo de sensor
+    # Aplicar el filtro definitivo al DataFrame
+    df_filtrado = df[(df['Fecha_Local'] >= fecha_inicio_filtro) & (df['Fecha_Local'] <= fecha_fin_filtro)]
+    
+    # Mostrar indicador textual de fechas seleccionadas en la barra lateral para dar feedback visual
+    st.sidebar.info(f"📅 **Intervalo activo:**\n\n{fecha_inicio_filtro.strftime('%b-%d-%Y')} al {fecha_fin_filtro.strftime('%b-%d-%Y')}")
+
+    # --- SEPARAR DATAFRAMES POR TIPO DE SENSOR ---
     hydros_df = df_filtrado[df_filtrado['Sensor'].str.contains('CTD|Hydros', case=False, na=False)]
     soil_df = df_filtrado[df_filtrado['Sensor'].str.contains('5TE|5TM', case=False, na=False)]
     system_df = df_filtrado[df_filtrado['Sensor'].str.contains('Battery|Barometer|Logger', case=False, na=False)]
     
-    # Buscamos la temperatura del datalogger para el contexto histórico
     logger_temp_df = df_filtrado[df_filtrado['Variable'].str.contains('Logger Temperature', case=False, na=False)]
     
     if not logger_temp_df.empty:
         logger_temp_df = logger_temp_df.copy()
         logger_temp_df['Ubicación'] = "Temperatura del aire (datalogger)"
     
-    # Malla de seguridad para los colores (cubre nombres formateados y crudos de la base de datos)
     colors_hydros = {
         "Estero": "#0284c7", "Puerto 1": "#0284c7",
         "Pozo": "#f97316", "Puerto 2": "#f97316",
@@ -187,9 +232,9 @@ if not df.empty:
         "🔋 Estado del Sistema"
     ])
     
-    # PESTAÑA 1: HYDROS 21 (AGUA)
+    # PESTAÑA 1: HYDROS 21
     with tab1:
-        st.subheader(f"Monitoreo de la Columna de Agua - Últimos {dias_seleccionados} días")
+        st.subheader("Monitoreo de la Columna de Agua")
         if not hydros_df.empty:
             col1, col2, col3 = st.columns(3)
             
@@ -221,7 +266,7 @@ if not df.empty:
 
     # PESTAÑA 2: SENSORES DE SUELO
     with tab2:
-        st.subheader(f"Humedad y Temperatura de Suelo - Últimos {dias_seleccionados} días")
+        st.subheader("Humedad y Temperatura de Suelo")
         if not soil_df.empty:
             col1, col2, col3 = st.columns(3)
             
@@ -251,9 +296,9 @@ if not df.empty:
         else:
             st.info("No se encontraron datos de los sensores de suelo en este periodo.")
 
-    # PESTAÑA 3: DIAGNÓSTICO DEL SISTEMA
+    # PESTAÑA 3: DIAGNÓSTICO
     with tab3:
-        st.subheader(f"Parámetros de Diagnóstico y Referencia - Últimos {dias_seleccionados} días")
+        st.subheader("Parámetros de Diagnóstico y Referencia")
         if not system_df.empty:
             col1, col2 = st.columns(2)
             
