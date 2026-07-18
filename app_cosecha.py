@@ -19,7 +19,7 @@ col_meta1, col_meta2 = st.columns(2)
 with col_meta1:
     st.markdown("""
     * **Elevación:** 1576 msnm
-    * **Financiamiento:** Fondecyt Regular 1261545
+    * **Proyecto:** Fondecyt Regular 1261545
     * **Investigador Principal (IP):** Sebastian Krogh
     """)
 with col_meta2:
