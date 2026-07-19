@@ -101,9 +101,8 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
     )
     return fig
 
-# --- FUNCIÓN REVISADA: SUBPLOTS COMPARTIDOS PARA EVITAR CONFLICTOS DE EJE Y ---
+# --- FUNCIÓN CORREGIDA SIN CONFLICTOS DE SINTAXIS EN SUBPLOTS ---
 def crear_grafico_doble_eje(df_sub, titulo, y_label_izq):
-    # Creamos 2 subplots verticales que comparten el mismo eje X de tiempo
     fig = make_subplots(
         rows=2, cols=1, 
         shared_xaxes=True, 
@@ -152,12 +151,11 @@ def crear_grafico_doble_eje(df_sub, titulo, y_label_izq):
         legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5)
     )
     
-    # Ejes del panel superior (Nivel de agua)
-    fig.update_yaxes(title=dict(text=y_label_izq, font=dict(size=11)), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', row=1, col=1)
+    # Configuración de ejes usando los parámetros seguros 'title_text' y 'title_font'
+    fig.update_yaxes(title_text=y_label_izq, title_font=dict(size=11), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', row=1, col=1)
     
-    # Ejes del panel inferior (Desnivel)
     fig.update_xaxes(title=None, showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1', row=2, col=1)
-    fig.update_yaxes(title=dict(text="Desnivel P - E (mm)", font=dict(size=11), color="#b91c1c"), tickfont=dict(color="#b91c1c"), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', row=2, col=1)
+    fig.update_yaxes(title_text="Desnivel P - E (mm)", title_font=dict(size=11, color="#b91c1c"), tickfont=dict(color="#b91c1c"), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', row=2, col=1)
     
     return fig
 
@@ -257,7 +255,6 @@ if not df.empty:
                 sub_depth = hydros_df[hydros_df['Variable'] == 'Water Level']
                 if not sub_depth.empty:
                     unit_str = sub_depth['Unidad'].iloc[0]
-                    # Llamada corregida sin conflicto de actualización de layout
                     fig = crear_grafico_doble_eje(sub_depth, "Nivel de Agua y Desnivel Hidráulico", f"Profundidad ({unit_str})")
                     st.plotly_chart(fig, use_container_width=True)
                     
