@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import gspread
 from google.oauth2.service_account import Credentials
 import json
@@ -74,7 +75,7 @@ def cargar_datos_historicos():
 with st.spinner("Conectando con el histórico en Google Sheets..."):
     df = cargar_datos_historicos()
 
-# --- FUNCIÓN PARA GRÁFICOS MULTI-LÍNEA ESTILIZADOS ---
+# --- FUNCIÓN PARA GRÁFICOS MULTI-LÍNEA ESTILIZADOS STANDARD ---
 def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
     fig = px.line(
         df_var, 
@@ -89,39 +90,84 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
     fig.update_traces(line_width=2.5)
     
     fig.update_layout(
-        title=dict(
-            text=titulo, 
-            font=dict(size=14, family="Arial", color="#1e293b"), 
-            x=0.0,
-            y=0.95
-        ),
+        title=dict(text=titulo, font=dict(size=14, family="Arial", color="#1e293b"), x=0.0, y=0.95),
         hovermode="x unified",
         margin=dict(l=40, r=20, t=75, b=80),  
         height=400,
-        xaxis=dict(
-            title=None,
-            showgrid=True, 
-            gridcolor='#f1f5f9', 
-            tickformat="%d %b\n%H:%M", 
-            linecolor='#cbd5e1'
-        ),
-        yaxis=dict(
-            title=dict(text=y_label, font=dict(size=12)),
-            showgrid=True, 
-            gridcolor='#f1f5f9', 
-            linecolor='#cbd5e1', 
-            zeroline=False
-        ),
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.22,  
-            xanchor="center",
-            x=0.5,
-            title=dict(text="")
-        )
+        xaxis=dict(title=None, showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1'),
+        yaxis=dict(title=dict(text=y_label, font=dict(size=12)), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', zeroline=False),
+        legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, title=dict(text=""))
     )
+    return fig
+
+# --- FUNCIÓN ESPECIAL: GRÁFICO DOBLE EJE Y PARA NIVEL Y DESNIVEL ---
+def crear_grafico_doble_eje(df_sub, titulo, y_label_izq):
+    fig = go.Figure()
+    
+    # 1. Separar las series para el eje izquierdo
+    df_estero = df_sub[df_sub['Ubicación'].str.contains('Estero', case=False, na=False)].sort_values('Fecha_Local')
+    df_pozo = df_sub[df_sub['Ubicación'].str.contains('Pozo', case=False, na=False)].sort_values('Fecha_Local')
+    
+    # Línea Estero (Eje Izquierdo)
+    if not df_estero.empty:
+        fig.add_trace(go.Scatter(
+            x=df_estero['Fecha_Local'], y=df_estero['Valor'],
+            name="Estero", mode='lines', line=dict(color='#0284c7', width=2.5),
+            yaxis="y1"
+        ))
         
+    # Línea Pozo (Eje Izquierdo)
+    if not df_pozo.empty:
+        fig.add_trace(go.Scatter(
+            x=df_pozo['Fecha_Local'], y=df_pozo['Valor'],
+            name="Pozo", mode='lines', line=dict(color='#f97316', width=2.5),
+            yaxis="y1"
+        ))
+        
+    # 2. Calcular dinámicamente la serie del Desnivel (Eje Derecho)
+    if not df_estero.empty and not df_pozo.empty:
+        # Sincronizamos las series por tiempo usando un merge limpio
+        df_merge = pd.merge(
+            df_pozo[['Fecha_Local', 'Valor']], 
+            df_estero[['Fecha_Local', 'Valor']], 
+            on='Fecha_Local', suffixes=('_pozo', '_estero')
+        )
+        # Ecuación solicitada: Pozo - Estero - 290
+        df_merge['Desnivel'] = df_merge['Valor_pozo'] - df_merge['Valor_estero'] - 290.0
+        
+        fig.add_trace(go.Scatter(
+            x=df_merge['Fecha_Local'], y=df_merge['Desnivel'],
+            name="Desnivel Pozo - Estero (Calculado)", mode='lines', 
+            line=dict(color='#b91c1c', width=2.0, dash='dash'), # Línea segmentada roja para diferenciar
+            yaxis="y2"
+        ))
+        
+    # Configuración del Layout con dos ejes Y independientes
+    fig.update_layout(
+        title=dict(text=titulo, font=dict(size=14, family="Arial", color="#1e293b"), x=0.0, y=0.95),
+        template="plotly_white",
+        hovermode="x unified",
+        margin=dict(l=40, r=50, t=75, b=80),  
+        height=400,
+        xaxis=dict(title=None, showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1'),
+        
+        # Eje Izquierdo (Nivel)
+        yaxis1=dict(
+            title=dict(text=y_label_izq, font=dict(size=12)),
+            showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', zeroline=False
+        ),
+        
+        # Eje Derecho (Desnivel)
+        yaxis2=dict(
+            title=dict(text="Desnivel Pozo - Estero (mm)", font=dict(size=12), color="#b91c1c"),
+            tickfont=dict(color="#b91c1c"),
+            showgrid=False, # Ocultamos su grilla para que no se cruce feo con la de la izquierda
+            linecolor='#b91c1c',
+            overlaying="y",
+            side="right"
+        ),
+        legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5)
+    )
     return fig
 
 # --- PROCESAMIENTO Y FILTROS EN PÁGINA ---
@@ -129,11 +175,9 @@ if not df.empty:
     # --- BARRA LATERAL: SELECTOR TEMPORAL ESTILO ZENTRA ---
     st.sidebar.header("🗓️ Rango Temporal (Zentra Style)")
     
-    # Determinar extremos reales de la base de datos
     max_fecha = df['Fecha_Local'].max()
     min_fecha = df['Fecha_Local'].min()
     
-    # Opciones del menú desplegable basándonos en tu imagen
     opciones_rango = [
         "24H", "2D", "1W", "2W", "1M", "3M", "6M", "1Y", 
         "Rolling Range", "Fixed Start Date", "Fixed Date Range"
@@ -142,10 +186,9 @@ if not df.empty:
     seleccion = st.sidebar.selectbox(
         "Selecciona el intervalo de visualización:",
         options=opciones_rango,
-        index=3, # Por defecto inicializa en '2W' (2 semanas) igual que tu captura
+        index=3, 
     )
     
-    # Lógica de filtrado de acuerdo a la opción seleccionada
     fecha_inicio_filtro = max_fecha
     fecha_fin_filtro = max_fecha
     
@@ -166,43 +209,24 @@ if not df.empty:
     elif seleccion == "1Y":
         fecha_inicio_filtro = max_fecha - pd.Timedelta(days=365)
     elif seleccion == "Rolling Range":
-        # Muestra todo el registro completo de la base de datos de manera dinámica
         fecha_inicio_filtro = min_fecha
-        
     elif seleccion == "Fixed Start Date":
-        # Despliega calendario para definir solo la fecha de inicio fija
         st.sidebar.markdown("---")
-        fecha_manual_ini = st.sidebar.date_input(
-            "Fecha de inicio fija:", 
-            value=min_fecha.date(),
-            min_value=min_fecha.date(),
-            max_value=max_fecha.date()
-        )
+        fecha_manual_ini = st.sidebar.date_input("Fecha de inicio fija:", value=min_fecha.date(), min_value=min_fecha.date(), max_value=max_fecha.date())
         fecha_inicio_filtro = pd.to_datetime(fecha_manual_ini)
-        
     elif seleccion == "Fixed Date Range":
-        # Despliega calendario interactivo de rango cerrado (Inicio y Fin)
         st.sidebar.markdown("---")
-        rango_fechas = st.sidebar.date_input(
-            "Selecciona el rango (Inicio - Fin):",
-            value=(min_fecha.date(), max_fecha.date()),
-            min_value=min_fecha.date(),
-            max_value=max_fecha.date()
-        )
-        # Control de seguridad por si el usuario hace clic solo en una fecha del rango
+        rango_fechas = st.sidebar.date_input("Selecciona el rango (Inicio - Fin):", value=(min_fecha.date(), max_fecha.date()), min_value=min_fecha.date(), max_value=max_fecha.date())
         if isinstance(rango_fechas, tuple) and len(rango_fechas) == 2:
             fecha_inicio_filtro = pd.to_datetime(rango_fechas[0])
             fecha_fin_filtro = pd.to_datetime(rango_fechas[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
         else:
             fecha_inicio_filtro = pd.to_datetime(rango_fechas[0])
 
-    # Aplicar el filtro definitivo al DataFrame
     df_filtrado = df[(df['Fecha_Local'] >= fecha_inicio_filtro) & (df['Fecha_Local'] <= fecha_fin_filtro)]
-    
-    # Mostrar indicador textual de fechas seleccionadas en la barra lateral para dar feedback visual
     st.sidebar.info(f"📅 **Intervalo activo:**\n\n{fecha_inicio_filtro.strftime('%b-%d-%Y')} al {fecha_fin_filtro.strftime('%b-%d-%Y')}")
 
-    # --- SEPARAR DATAFRAMES POR TIPO DE SENSOR ---
+    # Separar dataframes por tipo de sensor
     hydros_df = df_filtrado[df_filtrado['Sensor'].str.contains('CTD|Hydros', case=False, na=False)]
     soil_df = df_filtrado[df_filtrado['Sensor'].str.contains('5TE|5TM', case=False, na=False)]
     system_df = df_filtrado[df_filtrado['Sensor'].str.contains('Battery|Barometer|Logger', case=False, na=False)]
@@ -242,7 +266,8 @@ if not df.empty:
                 sub_depth = hydros_df[hydros_df['Variable'] == 'Water Level']
                 if not sub_depth.empty:
                     unit_str = sub_depth['Unidad'].iloc[0]
-                    fig = crear_grafico_estilizado(sub_depth, "Nivel de Agua", f"Profundidad ({unit_str})", colors_hydros)
+                    # LLAMADA A LA NUEVA FUNCIÓN DE DOBLE EJE Y
+                    fig = crear_grafico_doble_eje(sub_depth, "Nivel de Agua y Desnivel Hidráulico", f"Profundidad ({unit_str})")
                     st.plotly_chart(fig, use_container_width=True)
                     
             with col2:
