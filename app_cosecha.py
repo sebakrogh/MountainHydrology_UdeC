@@ -16,7 +16,7 @@ st.set_page_config(page_title="Valle Hermoso - Monitoreo Histórico", layout="wi
 st.title("🏔️ Estación de Monitoreo en Valle Hermoso")
 st.markdown("### **Grupo de Hidrología de Montaña UdeC**")
 
-# Bloque de metadatos del sitio (Actualizado con información física de sensores)
+# Bloque de metadatos del sitio
 col_meta1, col_meta2 = st.columns(2)
 with col_meta1:
     st.markdown("""
@@ -96,20 +96,27 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
         template="plotly_white"
     )
     
-    fig.update_traces(line_width=2.5)
+    # Simplifica el hover flotante para mostrar solo el valor numérico puro de la serie (idéntico a nivel de agua)
+    fig.update_traces(line_width=2.5, hovertemplate="%{y}")
     
     fig.update_layout(
         title=dict(text=titulo, font=dict(size=14, family="Arial", color="#1e293b"), x=0.0, y=0.95),
-        hovermode="x unified",
+        hovermode="x unified",  # Activa la barra vertical unificada que no estorba
         margin=dict(l=40, r=20, t=75, b=80),  
         height=400,
-        xaxis=dict(title=None, showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1'),
+        xaxis=dict(
+            title=dict(text="Hora Local", font=dict(size=10, color="#64748b")), # Especifica explícitamente Hora Local
+            showgrid=True, 
+            gridcolor='#f1f5f9', 
+            tickformat="%d %b\n%H:%M", 
+            linecolor='#cbd5e1'
+        ),
         yaxis=dict(title=dict(text=y_label, font=dict(size=12)), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', zeroline=False),
-        legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, title=dict(text=""))
+        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, title=dict(text=""))
     )
     return fig
 
-# --- FUNCIÓN: SUBPLOTS COMPARTIDOS PARA EVITAR CONFLICTOS DE EJE Y ---
+# --- FUNCIÓN: SUBPLOTS COMPARTIDOS PARA NIVEL Y DESNIVEL ---
 def crear_grafico_doble_eje(df_sub, titulo, y_label_izq):
     fig = make_subplots(
         rows=2, cols=1, 
@@ -125,13 +132,15 @@ def crear_grafico_doble_eje(df_sub, titulo, y_label_izq):
     if not df_estero.empty:
         fig.add_trace(go.Scatter(
             x=df_estero['Fecha_Local'], y=df_estero['Valor'],
-            name="Estero", mode='lines', line=dict(color='#0284c7', width=2.5)
+            name="Estero", mode='lines', line=dict(color='#0284c7', width=2.5),
+            hovertemplate="%{y}"
         ), row=1, col=1)
         
     if not df_pozo.empty:
         fig.add_trace(go.Scatter(
             x=df_pozo['Fecha_Local'], y=df_pozo['Valor'],
-            name="Pozo", mode='lines', line=dict(color='#f97316', width=2.5)
+            name="Pozo", mode='lines', line=dict(color='#f97316', width=2.5),
+            hovertemplate="%{y}"
         ), row=1, col=1)
         
     # 2. Desnivel (Panel Inferior)
@@ -146,7 +155,8 @@ def crear_grafico_doble_eje(df_sub, titulo, y_label_izq):
         fig.add_trace(go.Scatter(
             x=df_merge['Fecha_Local'], y=df_merge['Desnivel'],
             name="Desnivel Pozo - Estero", mode='lines', 
-            line=dict(color='#b91c1c', width=2.0, dash='solid')
+            line=dict(color='#b91c1c', width=2.0, dash='solid'),
+            hovertemplate="%{y}"
         ), row=2, col=1)
         
     # Diseño limpio del layout unificado
@@ -160,7 +170,9 @@ def crear_grafico_doble_eje(df_sub, titulo, y_label_izq):
     )
     
     fig.update_yaxes(title_text=y_label_izq, title_font=dict(size=11), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', row=1, col=1)
-    fig.update_xaxes(title=None, showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1', row=2, col=1)
+    
+    # Eje X unificado especificando la etiqueta de Hora Local al final del panel inferior
+    fig.update_xaxes(title=dict(text="Hora Local", font=dict(size=10, color="#64748b")), showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1', row=2, col=1)
     fig.update_yaxes(title_text="Desnivel P - E (mm)", title_font=dict(size=11, color="#b91c1c"), tickfont=dict(color="#b91c1c"), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', row=2, col=1)
     
     return fig
