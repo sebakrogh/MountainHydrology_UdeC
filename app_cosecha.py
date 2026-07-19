@@ -16,19 +16,27 @@ st.set_page_config(page_title="Valle Hermoso - Monitoreo Histórico", layout="wi
 st.title("🏔️ Estación de Monitoreo en Valle Hermoso")
 st.markdown("### **Grupo de Hidrología de Montaña UdeC**")
 
-# Bloque de metadatos del sitio
+# Bloque de metadatos del sitio (Actualizado con información física de sensores)
 col_meta1, col_meta2 = st.columns(2)
 with col_meta1:
     st.markdown("""
+    **Información General:**
     * **Elevación:** 1576 msnm
     * **Financiamiento:** Fondecyt Regular 1261545
     * **Investigador Principal (IP):** Sebastian Krogh
+    * **Base de Datos:** Histórica almacenada en Google Sheets
+    * **Actualización:** Automática (Cosechador GitHub Actions todos los días a las 00:00)
     """)
 with col_meta2:
     st.markdown("""
-    * **Sensores en Terreno:** Hydros 21 (CTD-10) en Estero/Pozo y Sensores de Suelo (5TE/5TM)
-    * **Base de Datos:** Histórica almacenada en Google Sheets
-    * **Actualización:** Automática (Cosechador GitHub Actions todos los días a las 00:00)
+    **Configuración Física del Sitio:**
+    * **Distancia Horizontal Pozo - Estero:** 2.8 m
+    * **Profundidad del Pozo:** 90 cm
+    * **Sensores de Suelo (Humedad/Temperatura):**
+        * **Puerto 3:** Profundidad 20 cm
+        * **Puerto 4:** Profundidad 60 cm
+        * **Puerto 5:** Profundidad 90 cm
+    * **Sensores de Agua:** Hydros 21 (CTD-10) en Estero (P1) y Pozo (P2)
     """)
 
 st.markdown("---")
@@ -101,7 +109,7 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
     )
     return fig
 
-# --- FUNCIÓN CORREGIDA SIN CONFLICTOS DE SINTAXIS EN SUBPLOTS ---
+# --- FUNCIÓN: SUBPLOTS COMPARTIDOS PARA EVITAR CONFLICTOS DE EJE Y ---
 def crear_grafico_doble_eje(df_sub, titulo, y_label_izq):
     fig = make_subplots(
         rows=2, cols=1, 
@@ -151,9 +159,7 @@ def crear_grafico_doble_eje(df_sub, titulo, y_label_izq):
         legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5)
     )
     
-    # Configuración de ejes usando los parámetros seguros 'title_text' y 'title_font'
     fig.update_yaxes(title_text=y_label_izq, title_font=dict(size=11), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', row=1, col=1)
-    
     fig.update_xaxes(title=None, showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1', row=2, col=1)
     fig.update_yaxes(title_text="Desnivel P - E (mm)", title_font=dict(size=11, color="#b91c1c"), tickfont=dict(color="#b91c1c"), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', row=2, col=1)
     
