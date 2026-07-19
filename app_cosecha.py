@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import gspread
 from google.oauth2.service_account import Credentials
 import json
@@ -33,7 +34,7 @@ with col_meta2:
 st.markdown("---")
 
 # --- CONEXIÓN DE SEGURIDAD A GOOGLE SHEETS (MÉTODO BASE64) ---
-@st.cache_data(ttl=600)  # Almacena en caché los datos por 10 minutos
+@st.cache_data(ttl=600)  
 def cargar_datos_historicos():
     try:
         b64_creds = st.secrets.get("B64_CREDS")
@@ -100,74 +101,64 @@ def crear_grafico_estilizado(df_var, titulo, y_label, color_map=None):
     )
     return fig
 
-# --- FUNCIÓN ESPECIAL: GRÁFICO DOBLE EJE Y PARA NIVEL Y DESNIVEL ---
+# --- FUNCIÓN REVISADA: SUBPLOTS COMPARTIDOS PARA EVITAR CONFLICTOS DE EJE Y ---
 def crear_grafico_doble_eje(df_sub, titulo, y_label_izq):
-    fig = go.Figure()
+    # Creamos 2 subplots verticales que comparten el mismo eje X de tiempo
+    fig = make_subplots(
+        rows=2, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.08,
+        row_heights=[0.6, 0.4]
+    )
     
-    # 1. Separar las series para el eje izquierdo
     df_estero = df_sub[df_sub['Ubicación'].str.contains('Estero', case=False, na=False)].sort_values('Fecha_Local')
     df_pozo = df_sub[df_sub['Ubicación'].str.contains('Pozo', case=False, na=False)].sort_values('Fecha_Local')
     
-    # Línea Estero (Eje Izquierdo)
+    # 1. Nivel de Agua (Panel Superior)
     if not df_estero.empty:
         fig.add_trace(go.Scatter(
             x=df_estero['Fecha_Local'], y=df_estero['Valor'],
-            name="Estero", mode='lines', line=dict(color='#0284c7', width=2.5),
-            yaxis="y1"
-        ))
+            name="Estero", mode='lines', line=dict(color='#0284c7', width=2.5)
+        ), row=1, col=1)
         
-    # Línea Pozo (Eje Izquierdo)
     if not df_pozo.empty:
         fig.add_trace(go.Scatter(
             x=df_pozo['Fecha_Local'], y=df_pozo['Valor'],
-            name="Pozo", mode='lines', line=dict(color='#f97316', width=2.5),
-            yaxis="y1"
-        ))
+            name="Pozo", mode='lines', line=dict(color='#f97316', width=2.5)
+        ), row=1, col=1)
         
-    # 2. Calcular dinámicamente la serie del Desnivel (Eje Derecho)
+    # 2. Desnivel (Panel Inferior)
     if not df_estero.empty and not df_pozo.empty:
-        # Sincronizamos las series por tiempo usando un merge limpio
         df_merge = pd.merge(
             df_pozo[['Fecha_Local', 'Valor']], 
             df_estero[['Fecha_Local', 'Valor']], 
             on='Fecha_Local', suffixes=('_pozo', '_estero')
         )
-        # Ecuación solicitada: Pozo - Estero - 290
         df_merge['Desnivel'] = df_merge['Valor_pozo'] - df_merge['Valor_estero'] - 290.0
         
         fig.add_trace(go.Scatter(
             x=df_merge['Fecha_Local'], y=df_merge['Desnivel'],
-            name="Desnivel Pozo - Estero (Calculado)", mode='lines', 
-            line=dict(color='#b91c1c', width=2.0, dash='dash'), # Línea segmentada roja para diferenciar
-            yaxis="y2"
-        ))
+            name="Desnivel Pozo - Estero", mode='lines', 
+            line=dict(color='#b91c1c', width=2.0, dash='solid')
+        ), row=2, col=1)
         
-    # Configuración del Layout con dos ejes Y independientes
+    # Diseño limpio del layout unificado
     fig.update_layout(
-        title=dict(text=titulo, font=dict(size=14, family="Arial", color="#1e293b"), x=0.0, y=0.95),
+        title=dict(text=titulo, font=dict(size=14, family="Arial", color="#1e293b"), x=0.0, y=0.97),
         template="plotly_white",
         hovermode="x unified",
-        margin=dict(l=40, r=50, t=75, b=80),  
-        height=400,
-        xaxis=dict(title=None, showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1'),
-        
-        # Eje Izquierdo (Nivel)
-        yaxis1=dict(
-            title=dict(text=y_label_izq, font=dict(size=12)),
-            showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', zeroline=False
-        ),
-        
-        # Eje Derecho (Desnivel)
-        yaxis2=dict(
-            title=dict(text="Desnivel Pozo - Estero (mm)", font=dict(size=12), color="#b91c1c"),
-            tickfont=dict(color="#b91c1c"),
-            showgrid=False, # Ocultamos su grilla para que no se cruce feo con la de la izquierda
-            linecolor='#b91c1c',
-            overlaying="y",
-            side="right"
-        ),
-        legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5)
+        margin=dict(l=40, r=40, t=75, b=80),  
+        height=450,
+        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5)
     )
+    
+    # Ejes del panel superior (Nivel de agua)
+    fig.update_yaxes(title=dict(text=y_label_izq, font=dict(size=11)), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', row=1, col=1)
+    
+    # Ejes del panel inferior (Desnivel)
+    fig.update_xaxes(title=None, showgrid=True, gridcolor='#f1f5f9', tickformat="%d %b\n%H:%M", linecolor='#cbd5e1', row=2, col=1)
+    fig.update_yaxes(title=dict(text="Desnivel P - E (mm)", font=dict(size=11), color="#b91c1c"), tickfont=dict(color="#b91c1c"), showgrid=True, gridcolor='#f1f5f9', linecolor='#cbd5e1', row=2, col=1)
+    
     return fig
 
 # --- PROCESAMIENTO Y FILTROS EN PÁGINA ---
@@ -266,7 +257,7 @@ if not df.empty:
                 sub_depth = hydros_df[hydros_df['Variable'] == 'Water Level']
                 if not sub_depth.empty:
                     unit_str = sub_depth['Unidad'].iloc[0]
-                    # LLAMADA A LA NUEVA FUNCIÓN DE DOBLE EJE Y
+                    # Llamada corregida sin conflicto de actualización de layout
                     fig = crear_grafico_doble_eje(sub_depth, "Nivel de Agua y Desnivel Hidráulico", f"Profundidad ({unit_str})")
                     st.plotly_chart(fig, use_container_width=True)
                     
